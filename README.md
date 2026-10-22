@@ -38,7 +38,11 @@ assets/
 
 ## AI（可选）
 
-设置页填入 DeepSeek / OpenAI / 任意 OpenAI 兼容接口的 Base URL、模型与 API Key。
+设置页有两种方式：
+
+- **浏览器内模型**：Qwen2.5 0.5B / 1.5B，用 Transformers.js + WebGPU（不支持时回退 CPU）。首次加载需下载模型（约 480MB / 1.2GB），之后缓存在本机，可离线使用。内置知识库未收录的知识点，由它现场讲解。
+- **云端接口**：DeepSeek / OpenAI / 任意 OpenAI 兼容接口，填入 Base URL、模型与 API Key。
+
 不配置时，翻译走免费接口，其余功能完全离线可用。
 
 ## 快捷键

@@ -1,6 +1,7 @@
 /* 知忆 · AI 能力（可选，用户自带 Key） */
 (function (Z) {
   const PRESETS = {
+    local: { label: '本地模型（浏览器内）', baseUrl: '', model: 'onnx-community/Qwen2.5-0.5B-Instruct' },
     deepseek: { label: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
     openai: { label: 'OpenAI', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
     custom: { label: '自定义兼容接口', baseUrl: '', model: '' }
@@ -8,10 +9,12 @@
 
   function cfg() {
     const c = Z.store.get('ai', {});
+    const provider = c.provider || 'local';
+    const preset = PRESETS[provider] || PRESETS.local;
     return {
-      provider: c.provider || 'deepseek',
-      baseUrl: c.baseUrl || PRESETS[c.provider || 'deepseek'].baseUrl,
-      model: c.model || PRESETS[c.provider || 'deepseek'].model,
+      provider,
+      baseUrl: c.baseUrl || preset.baseUrl,
+      model: c.model || preset.model,
       apiKey: c.apiKey || '',
       temperature: c.temperature == null ? 0.4 : c.temperature
     };
@@ -23,7 +26,10 @@
     return next;
   }
 
+  function isLocal() { return cfg().provider === 'local'; }
+
   function isReady() {
+    if (isLocal()) return !!(Z.LocalAI && Z.LocalAI.ready);
     const c = cfg();
     return !!(c.apiKey && c.baseUrl && c.model);
   }
@@ -60,7 +66,13 @@
 
   async function chat(messages, opts = {}) {
     const c = cfg();
-    if (!isReady()) throw new Error('尚未配置 AI：请到「设置 → AI 增强」填写 API Key');
+    if (!isReady()) throw new Error(isLocal() ? '本地模型尚未加载：请到「设置 → AI 增强」点“加载模型”' : '尚未配置 AI：请到「设置 → AI 增强」填写 API Key');
+    if (isLocal()) {
+      const msgs = opts.json
+        ? [{ role: 'system', content: '你只输出严格 JSON，不要输出解释、不要用 Markdown 代码块。' }, ...messages]
+        : messages;
+      return Z.LocalAI.chat(msgs, { maxTokens: opts.maxTokens || 900, temperature: opts.temperature == null ? c.temperature : opts.temperature });
+    }
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), opts.timeout || 60000);
     try {
@@ -100,7 +112,6 @@
     ], { maxTokens: 20, temperature: 0 });
     return txt.trim();
   }
-
   async function translate(texts, from, to) {
     const chunks = [];
     let batch = [];
@@ -140,20 +151,25 @@
       { role: 'system', content: '你是一位善于把复杂概念讲透的老师。请用中文输出严格 JSON，不要输出 JSON 以外的内容。' },
       { role: 'user', content: `请解释知识点「${concept}」${subject ? '（学科：' + subject + '）' : ''}。
 ${extra ? '补充信息：' + extra : ''}
+要求：
+- formula 必须写出可用的具体式子（符号、单位、适用形式），不要写「核心公式」「定义式」这类占位词；确实无公式时才留空数组。
+- quiz 每题的 hint 要给可操作的提示（先想什么、用哪个条件），a 要给出完整答案。
+- variants 的 hint 必须写出第一步解题动作。
+- extensions 要落到具体结论或应用，不要泛泛而谈。
 输出 JSON 结构：
 {
  "essence": "一句话本质（不超过40字，抓住核心）",
  "definition": "严谨但不堆砌术语的定义（80-150字）",
  "intuition": "生活化类比或直观解释（80-150字）",
  "points": ["关键要点1", "关键要点2", "关键要点3"],
- "formula": ["公式或符号表达；没有则空数组"],
+ "formula": ["F = ma（F 牛顿，m 千克，a 米每二次方秒）"],
  "conditions": ["适用条件/前提1", "条件2"],
  "mistakes": [{"wrong":"常见错误理解","right":"正确理解"}],
- "variants": [{"q":"变式题或变形问法","hint":"思路提示"}],
- "extensions": ["拓展延伸1", "拓展延伸2"],
+ "variants": [{"q":"变式题或变形问法","hint":"第一步：……"}],
+ "extensions": ["具体拓展结论或应用1", "拓展2"],
  "relations": [{"name":"相关概念","why":"关系说明"}],
- "quiz": [{"q":"自测问题","a":"参考答案"}]
-}` }], { json: true, temperature: 0.5, maxTokens: 2600 });
+ "quiz": [{"q":"自测问题","hint":"思路提示","a":"完整参考答案"}]
+}` }], { json: true, temperature: 0.5, maxTokens: 3000 });
     return parseJSON(raw);
   }
 
@@ -192,7 +208,15 @@ ${text.slice(0, 5000)}
   }
 
   Z.AI = {
-    PRESETS, cfg, save, isReady, chat, test, translate, explain, feynman, mindmap, cards, parseJSON,
-    label() { const c = cfg(); return c.provider === 'custom' ? (c.model || '自定义 AI') : PRESETS[c.provider].label + ' · ' + c.model; }
+    PRESETS, cfg, save, isReady, isLocal, chat, test, translate, explain, feynman, mindmap, cards, parseJSON,
+    label() {
+      const c = cfg();
+      if (c.provider === 'local') {
+        const s = Z.LocalAI?.snapshot?.();
+        return s?.ready ? '浏览器内 · ' + (s.model?.name || '本地模型') : '浏览器内 · 未加载';
+      }
+      if (c.provider === 'custom') return c.model || '自定义 AI';
+      return PRESETS[c.provider].label + ' · ' + c.model;
+    }
   };
 })(window.ZY);

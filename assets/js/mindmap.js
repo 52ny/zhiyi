@@ -154,14 +154,17 @@
       </div>
       <div class="mm-canvas" id="mm-canvas">
         <svg xmlns="http://www.w3.org/2000/svg" id="mm-svg"></svg>
-        <div class="mm-hint">拖动节点调整位置 · 滚轮缩放 · 拖动画布平移</div>
+        <div class="mm-detail" id="mm-detail" hidden></div>
+        <div class="mm-hint">点击节点看原文 · 双击改名 · 滚轮缩放</div>
       </div>
     </div>`;
     Z.hydrateIcons(container);
     renderSvg();
-    fit();
+    resetView();
     bind();
-    return { destroy() {} };
+    const onKey = (e) => { if (e.key === 'Escape') hideDetail(); };
+    document.addEventListener('keydown', onKey);
+    return { destroy() { document.removeEventListener('keydown', onKey); } };
   }
 
   function visibleChildren(n) {
@@ -238,6 +241,72 @@
 
   function findItem(nodes, node) { return nodes.find((x) => x.node === node); }
 
+  /* ---------- 节点详情：直接在导图内看原文 ---------- */
+  function detailText(node) {
+    const doc = ctx.doc;
+    const blocks = (doc.blocks || []).filter((b) => b.text);
+    const i = node.block;
+    if (i != null && doc.blocks[i]) {
+      const b = doc.blocks[i];
+      const parts = [b.text];
+      // 标题节点：把紧随其后的正文一起带出，避免只看到一行标题
+      if (b.t && b.t[0] === 'h') {
+        for (let k = i + 1; k < doc.blocks.length && parts.length < 4; k++) {
+          const nb = doc.blocks[k];
+          if (!nb.text) continue;
+          if (nb.t && nb.t[0] === 'h') break;
+          parts.push(nb.text);
+        }
+      }
+      return { main: parts.join('\n'), trans: doc.translations?.[i] || '' };
+    }
+    // 总概节点：聚合资料的开头与标题，给出可读的整体框架
+    const heads = blocks.filter((b) => b.t && b.t[0] === 'h').slice(0, 6).map((b) => '· ' + b.text);
+    const paras = blocks.filter((b) => b.t !== 'h').slice(0, 3).map((b) => b.text);
+    const text = [doc.title, ...heads, ...paras].filter(Boolean).join('\n');
+    return { main: text || '这份资料还没有可展示的正文。', trans: '' };
+  }
+
+  function showDetail(node) {
+    const box = Z.$('#mm-detail', ctx.container);
+    if (!box || !node) return;
+    const info = detailText(node);
+    const isRoot = node.block == null;
+    box.hidden = false;
+    box.innerHTML = `<div class="mmd-head">
+        <span class="mmd-tag">${isRoot ? '总概' : '原文'}</span>
+        <strong>${Z.esc(Z.truncate(node.text, 40))}</strong>
+        <button class="ghost-icon tiny" data-mm-detail="close">${Z.icon('close')}</button>
+      </div>
+      <div class="mmd-body">${Z.esc(info.main)}</div>
+      ${info.trans ? `<div class="mmd-trans">${Z.esc(info.trans)}</div>` : ''}
+      <div class="mmd-foot">
+        ${isRoot ? '' : '<button class="btn ghost small" data-mm-detail="jump">定位原文</button>'}
+        <button class="btn ghost small" data-mm-detail="speak">${Z.icon('volume')}朗读</button>
+        <span class="mmd-hint">${isRoot ? '点击分支节点可看对应段落' : '来自导入原文，可继续在阅读页批注'}</span>
+      </div>`;
+    Z.hydrateIcons(box);
+    ctx.detailNode = node;
+  }
+
+  function hideDetail() {
+    const box = Z.$('#mm-detail', ctx.container);
+    if (box) box.hidden = true;
+    ctx.detailNode = null;
+  }
+
+  function handleDetail(act) {
+    const node = ctx.detailNode;
+    if (act === 'close') { hideDetail(); return; }
+    if (!node) return;
+    if (act === 'jump' && node.block != null) { ctx.onJump(node.block); return; }
+    if (act === 'speak') {
+      const info = detailText(node);
+      Z.TTS.speak(info.trans || info.main, { lang: ctx.doc.lang });
+    }
+  }
+
+
   function renderSvg() {
     const svg = Z.$('#mm-svg', ctx.container);
     if (!svg) return;
@@ -271,23 +340,38 @@
       </g>`;
     });
     const b = L.bounds;
-    svg.setAttribute('viewBox', `0 0 ${Math.max(1, b.maxX + 60)} ${Math.max(1, b.maxY + 40)}`);
+    // viewBox 与画布像素一致，缩放只由 transform 控制，避免内容被二次缩小
+    const vw = svg.clientWidth || svg.parentElement?.clientWidth || 900;
+    const vh = svg.clientHeight || svg.parentElement?.clientHeight || 560;
+    svg.setAttribute('viewBox', `0 0 ${Math.max(1, vw)} ${Math.max(1, vh)}`);
     svg.innerHTML = `<g id="mm-stage" transform="translate(${ctx.view.x},${ctx.view.y}) scale(${ctx.view.k})">${links}${nodeHtml}</g>`;
+  }
+
+  function resetView() {
+    const svg = Z.$('#mm-svg', ctx.container);
+    if (!svg) return;
+    const box = svg.getBoundingClientRect();
+    const b = ctx.layout?.bounds || { minX: 0, maxX: 800, maxY: 600, minY: 0 };
+    const k = 0.9;
+    ctx.view = { k, x: 24, y: Math.max(16, (box.height - (b.maxY - b.minY) * k) / 2 - b.minY * k) };
+    renderSvg();
   }
 
   function fit() {
     const svg = Z.$('#mm-svg', ctx.container);
     if (!svg) return;
     const box = svg.getBoundingClientRect();
-    const b = ctx.layout?.bounds || { maxX: 800, maxY: 600 };
-    const k = Z.clamp(Math.min((box.width - 40) / Math.max(300, b.maxX + 40), (box.height - 40) / Math.max(200, b.maxY + 40)), 0.3, 1.1);
-    ctx.view = { k, x: 10, y: Math.max(10, (box.height - (b.maxY - b.minY) * k) / 2 - b.minY * k) };
+    const b = ctx.layout?.bounds || { minX: 0, maxX: 800, maxY: 600, minY: 0 };
+    const k = Z.clamp(Math.min((box.width - 48) / Math.max(320, b.maxX - b.minX + 40), (box.height - 48) / Math.max(220, b.maxY - b.minY + 40)), 0.4, 1.1);
+    ctx.view = { k, x: 24 - b.minX * k, y: Math.max(16, (box.height - (b.maxY - b.minY) * k) / 2 - b.minY * k) };
     renderSvg();
   }
 
   function bind() {
     const root = ctx.container;
     root.addEventListener('click', (e) => {
+      const dact = e.target.closest('[data-mm-detail]')?.dataset.mmDetail;
+      if (dact) { handleDetail(dact); return; }
       const act = e.target.closest('[data-mm]')?.dataset.mm;
       if (act) { action(act); return; }
       const toggle = e.target.closest('[data-toggle]');
@@ -302,14 +386,18 @@
       const nodeEl = e.target.closest('.mm-node');
       if (nodeEl) {
         const id = nodeEl.dataset.id;
+        const node = findNode(id);
         if (ctx.recall && Number(nodeEl.dataset.depth) >= 2) {
           ctx.revealed.add(id);
           ctx.selected = id;
           renderSvg();
+          showDetail(node);
           return;
         }
         ctx.selected = id;
         renderSvg();
+        showDetail(node);
+        return;
       }
     });
 
@@ -400,7 +488,7 @@
     }
     if (act === 'ai') {
       if (!Z.AI.isReady()) {
-        Z.toast('请先在设置中配置 AI 接口', 'error');
+        Z.toast('请先在设置中加载本地模型或填写 API Key', 'error');
         location.hash = '#/settings';
         return;
       }

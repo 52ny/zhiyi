@@ -136,6 +136,7 @@
       const act = e.target.closest('[data-lab]')?.dataset.lab;
       if (!act) return;
       if (act === 'ai') { run(true); return; }
+      if (act === 'go-ai') { location.hash = '#/settings'; return; }
       if (act === 'save') { await saveDoc(); return; }
       if (act === 'export') { exportMd(); return; }
       if (act === 'reveal') {
@@ -196,6 +197,7 @@
 
     state.result = local ? JSON.parse(JSON.stringify(local)) : generic(concept, state.subject);
     state.source = local ? '内置知识库' : '通用拆解框架';
+    if (!local) Z.toast('内置库没有这一条：加载本地模型即可深度拆解任意知识点', 'info', 4000);
     renderResult();
     el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
@@ -213,10 +215,15 @@
     </details>`).join('');
     const quiz = (r.quiz || []).map((q, i) => `<div class="quiz-item" data-lab="reveal">
       <div class="quiz-q"><span>Q${i + 1}</span>${esc(q.q)}</div>
+      <div class="quiz-hint">提示：${esc(q.hint || '先想定义与适用条件，再落到结论。')}</div>
       <div class="quiz-a"><div>${esc(q.a)}</div></div>
     </div>`).join('');
 
     el.innerHTML = `<article class="lab-result-card">
+      ${state.source === '通用拆解框架' ? `<div class="ai-cta">
+        <div><strong>这只是通用模板</strong><span>内置库未收录，加载浏览器内模型后，可对任意知识点给出公式、条件与拓展。</span></div>
+        <button class="btn primary small" data-lab="go-ai">加载本地模型</button>
+      </div>` : ''}
       <header class="lab-hero">
         <div class="lh-tag">${esc(r.subject || '综合')} · ${esc(state.source)}</div>
         <h2>${esc(r.name)}</h2>
@@ -235,10 +242,14 @@
 
       ${r.points?.length ? `<section class="lab-block"><h4><span>03</span>关键要点</h4><ul class="lab-points">${r.points.map((p) => `<li>${esc(p)}</li>`).join('')}</ul></section>` : ''}
 
-      ${(r.formula?.length || r.conditions?.length) ? `<div class="lab-duo">
-        ${r.formula?.length ? `<section class="lab-block"><h4><span>04</span>公式与表达</h4><div class="formula-list">${r.formula.map((f) => `<code>${esc(f)}</code>`).join('')}</div></section>` : ''}
-        ${r.conditions?.length ? `<section class="lab-block"><h4><span>05</span>适用条件</h4><ul class="cond-list">${r.conditions.map((c) => `<li>${esc(c)}</li>`).join('')}</ul></section>` : ''}
-      </div>` : ''}
+      <div class="lab-duo">
+        <section class="lab-block"><h4><span>04</span>公式与表达</h4>
+          ${r.formula?.length
+            ? `<div class="formula-list">${r.formula.map((f) => `<code>${esc(f)}</code>`).join('')}</div>`
+            : '<p class="muted small">该知识点没有统一公式，重点记忆定义、条件与判定关系。</p>'}
+        </section>
+        <section class="lab-block"><h4><span>05</span>适用条件</h4>${r.conditions?.length ? `<ul class="cond-list">${r.conditions.map((c) => `<li>${esc(c)}</li>`).join('')}</ul>` : '<p class="muted small">暂无。</p>'}</section>
+      </div>
 
       ${mistakes ? `<section class="lab-block"><h4><span>06</span>常见误区</h4><div class="mistake-grid">${mistakes}</div></section>` : ''}
 

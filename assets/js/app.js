@@ -49,6 +49,29 @@
   function setTheme(t) { Z.store.set('theme', t); applyTheme(); }
   function setPalette(p) { Z.store.set('palette', p); applyTheme(); }
 
+  function localStatusText(snap) {
+    const s = snap || Z.LocalAI.snapshot();
+    if (s.error) return s.error;
+    if (s.loading) return s.status || '加载中…';
+    if (s.ready) return (s.device === 'webgpu' ? 'GPU 加速' : 'CPU 推理') + ' · ' + (s.model?.name || '模型') + ' 已就绪';
+    return '未加载 · 首次需下载模型';
+  }
+
+  function paintLocal(snap) {
+    const fill = Z.$('#local-fill');
+    if (!fill) return;
+    fill.style.width = (snap.ready ? 100 : snap.progress || 0) + '%';
+    const st = Z.$('#local-status');
+    if (st) st.textContent = localStatusText(snap);
+    const btn = Z.$('#local-load');
+    if (btn) {
+      btn.disabled = !!snap.loading;
+      btn.textContent = snap.loading ? '加载中…' : snap.ready ? '重新加载' : '加载模型';
+    }
+    const ai = Z.$('#ai-status');
+    if (ai && Z.AI.isLocal()) ai.textContent = snap.ready ? '可用 · ' + Z.AI.label() : '未就绪';
+  }
+
   function setCrumb(html) { Z.$('#crumb').innerHTML = html; }
   function setTopActions(html) {
     const el = Z.$('#top-actions');
@@ -467,29 +490,48 @@
       </section>
 
       <section class="set-card">
-        <div class="set-title"><span class="set-ico">${Z.icon('sparkle')}</span><div><h3>AI 增强</h3><p>讲解、翻译、出题。不填也能用。</p></div></div>
+        <div class="set-title"><span class="set-ico">${Z.icon('sparkle')}</span><div><h3>AI 增强</h3><p>浏览器内模型免费、离线；也可接云端接口。</p></div></div>
         <div class="set-grid">
-          <label>服务商
+          <label class="span2">模型来源
             <select id="ai-provider">
               ${Object.entries(Z.AI.PRESETS).map(([k, v]) => `<option value="${k}" ${ai.provider === k ? 'selected' : ''}>${v.label}</option>`).join('')}
             </select>
           </label>
-          <label>模型
-            <input class="input" id="ai-model" value="${Z.esc(ai.model)}" placeholder="deepseek-chat">
-          </label>
-          <label class="span2">接口地址（兼容 OpenAI 格式）
-            <input class="input" id="ai-base" value="${Z.esc(ai.baseUrl)}" placeholder="https://api.deepseek.com/v1">
-          </label>
-          <label class="span2">API Key（只保存在本地）
-            <input class="input" id="ai-key" type="password" value="${Z.esc(ai.apiKey)}" placeholder="sk-...">
-          </label>
+          <div class="span2 local-panel" id="local-panel" ${ai.provider === 'local' ? '' : 'hidden'}>
+            <div class="local-row">
+              <select id="local-model">
+                ${Z.LocalAI.MODELS.map((m) => `<option value="${m.id}" ${Z.LocalAI.snapshot().modelId === m.id ? 'selected' : ''}>${m.name} · ${m.size}</option>`).join('')}
+              </select>
+              <button class="btn primary small" id="local-load">加载模型</button>
+              <button class="btn ghost small" id="local-unload">卸载</button>
+            </div>
+            <div class="local-bar"><i id="local-fill"></i></div>
+            <div class="local-status" id="local-status">${localStatusText()}</div>
+            <div class="local-row">
+              <input class="input" id="local-mirror" value="${Z.esc(Z.LocalAI.mirrorHost())}" placeholder="模型源地址">
+              <button class="btn ghost small" id="local-mirror-save">保存源</button>
+            </div>
+          </div>
+          <div class="span2 api-fields" id="api-fields" ${ai.provider === 'local' ? 'hidden' : ''}>
+            <div class="set-grid">
+              <label>模型
+                <input class="input" id="ai-model" value="${Z.esc(ai.model)}" placeholder="deepseek-chat">
+              </label>
+              <label>API Key（只存本机）
+                <input class="input" id="ai-key" type="password" value="${Z.esc(ai.apiKey)}" placeholder="sk-...">
+              </label>
+              <label class="span2">接口地址（OpenAI 兼容）
+                <input class="input" id="ai-base" value="${Z.esc(ai.baseUrl)}" placeholder="https://api.deepseek.com/v1">
+              </label>
+            </div>
+          </div>
         </div>
         <div class="set-actions">
           <button class="btn primary small" id="ai-save">保存</button>
-          <button class="btn ghost small" id="ai-test">测试连接</button>
-          <span class="set-status" id="ai-status">${Z.AI.isReady() ? '已配置 · ' + Z.esc(Z.AI.label()) : '未配置'}</span>
+          <button class="btn ghost small" id="ai-test">测试</button>
+          <span class="set-status" id="ai-status">${Z.AI.isReady() ? '可用 · ' + Z.esc(Z.AI.label()) : '未就绪'}</span>
         </div>
-        <p class="set-hint">浏览器直连需服务商允许跨域；失败可换自建兼容接口。</p>
+        <p class="set-hint" id="ai-hint">${ai.provider === 'local' ? '首次加载需下载模型（约 480MB），之后缓存在本机，可离线使用。' : '浏览器直连需服务商允许跨域。'}</p>
       </section>
 
       <section class="set-card">
@@ -554,30 +596,76 @@
     }));
 
     Z.$('#ai-provider').addEventListener('change', (e) => {
-      const p = Z.AI.PRESETS[e.target.value];
-      if (!p) return;
-      Z.$('#ai-base').value = p.baseUrl;
-      Z.$('#ai-model').value = p.model;
+      const v = e.target.value;
+      const isLocal = v === 'local';
+      Z.$('#local-panel').hidden = !isLocal;
+      Z.$('#api-fields').hidden = isLocal;
+      const hint = Z.$('#ai-hint');
+      if (hint) hint.textContent = isLocal
+        ? '首次加载需下载模型（约 480MB），之后缓存在本机，可离线使用。'
+        : '浏览器直连需服务商允许跨域。';
+      const p = Z.AI.PRESETS[v];
+      if (p && !isLocal) {
+        Z.$('#ai-base').value = p.baseUrl;
+        Z.$('#ai-model').value = p.model;
+      }
+      if (isLocal) paintLocal(Z.LocalAI.snapshot());
+    });
+    Z.$('#local-model').addEventListener('change', (e) => {
+      Z.AI.save({ provider: 'local', model: e.target.value });
+      Z.$('#ai-hint').textContent = e.target.value.includes('1.5B')
+        ? '首次加载需下载约 1.2GB，建议在有独显或高性能核显的设备上使用。'
+        : '首次加载需下载模型（约 480MB），之后缓存在本机，可离线使用。';
+    });
+    Z.$('#local-mirror-save').addEventListener('click', () => {
+      const v = Z.$('#local-mirror').value.trim();
+      Z.store.set('local.mirror', v || Z.LocalAI.MIRROR);
+      Z.$('#local-mirror').value = Z.LocalAI.mirrorHost();
+      Z.toast('模型源已更新，重新加载生效', 'ok');
+    });
+    Z.$('#local-load').addEventListener('click', async () => {
+      const model = Z.$('#local-model').value;
+      Z.AI.save({ provider: 'local', model });
+      Z.LocalAI.setProgressHandler(paintLocal);
+      paintLocal(Z.LocalAI.snapshot());
+      const snap = await Z.LocalAI.load(model);
+      paintLocal(snap);
+      if (snap.ready) Z.toast('本地模型已就绪', 'ok');
+      else if (snap.error) Z.toast(snap.status || '加载失败', 'error', 5000);
+    });
+    Z.$('#local-unload').addEventListener('click', async () => {
+      await Z.LocalAI.unload();
+      paintLocal(Z.LocalAI.snapshot());
+      Z.toast('已卸载，模型文件仍缓存', 'ok');
     });
     Z.$('#ai-save').addEventListener('click', () => {
-      Z.AI.save({
-        provider: Z.$('#ai-provider').value,
-        model: Z.$('#ai-model').value.trim(),
-        baseUrl: Z.$('#ai-base').value.trim(),
-        apiKey: Z.$('#ai-key').value.trim()
-      });
-      Z.$('#ai-status').textContent = Z.AI.isReady() ? '已保存 · ' + Z.AI.label() : '已保存（尚未填写 Key）';
+      const provider = Z.$('#ai-provider').value;
+      const patch = { provider };
+      if (provider === 'local') {
+        patch.model = Z.$('#local-model')?.value || Z.AI.PRESETS.local.model;
+      } else {
+        patch.model = Z.$('#ai-model').value.trim();
+        patch.baseUrl = Z.$('#ai-base').value.trim();
+        patch.apiKey = Z.$('#ai-key').value.trim();
+      }
+      Z.AI.save(patch);
+      Z.$('#ai-status').textContent = Z.AI.isReady()
+        ? '已保存 · ' + Z.AI.label()
+        : provider === 'local' ? '已保存（模型未加载）' : '已保存（尚未填写 Key）';
       Z.toast('AI 设置已保存', 'ok');
     });
     Z.$('#ai-test').addEventListener('click', async () => {
       Z.$('#ai-save').click();
-      if (!Z.AI.isReady()) { Z.toast('请先填写 API Key', 'error'); return; }
+      if (!Z.AI.isReady()) {
+        Z.toast(Z.AI.isLocal() ? '先点“加载模型”' : '请先填写 API Key', 'error');
+        return;
+      }
       const st = Z.$('#ai-status');
       st.innerHTML = '<span class="spinner small"></span> 测试中…';
       try {
         const r = await Z.AI.test();
-        st.textContent = '连接成功：' + r;
-        Z.toast('AI 连接正常', 'ok');
+        st.textContent = '正常：' + r;
+        Z.toast('AI 可用', 'ok');
       } catch (e) {
         st.textContent = '失败：' + e.message;
         Z.toast(e.message, 'error', 4200);
