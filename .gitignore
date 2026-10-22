@@ -1,0 +1,8 @@
+.DS_Store
+Thumbs.db
+_dl_*.py
+_copy_vendor.py
+_pkg/
+_raw/
+_tmp_*
+*.log

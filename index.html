@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="paper">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>知忆 · 把资料变成记得住的知识</title>
+<meta name="description" content="知忆：上传 PDF、图片、文档，一键生成思维导图、双语对照、点词朗读、手写批注与间隔复习卡片。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23176b5b'/%3E%3Ctext x='32' y='44' font-size='36' text-anchor='middle' fill='%23fff' font-family='serif'%3E知%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="assets/css/app.css">
+</head>
+<body>
+<div class="app" id="app">
+  <aside class="rail" id="rail">
+    <a class="brand" href="#/home" aria-label="知忆首页">
+      <span class="brand-mark">知</span>
+      <span class="brand-text"><strong>知忆</strong><em>ZHIYI · RECALL STUDIO</em></span>
+    </a>
+    <nav class="nav" id="nav">
+      <a href="#/home" data-route="home" class="nav-item"><span class="nav-ico" data-ico="library"></span><span>文库</span></a>
+      <a href="#/review" data-route="review" class="nav-item"><span class="nav-ico" data-ico="review"></span><span>复习</span><span class="nav-badge" id="nav-due" hidden>0</span></a>
+      <a href="#/lab" data-route="lab" class="nav-item"><span class="nav-ico" data-ico="lab"></span><span>知识工坊</span></a>
+      <a href="#/settings" data-route="settings" class="nav-item"><span class="nav-ico" data-ico="settings"></span><span>设置</span></a>
+    </nav>
+    <button class="import-cta" id="rail-import"><span data-ico="upload"></span><span>导入资料</span><kbd>U</kbd></button>
+    <div class="rail-foot">
+      <div class="streak-mini" id="streak-mini"><span class="streak-dot"></span><span>今天还未复习</span></div>
+      <button class="ghost-icon" id="theme-toggle" title="切换主题" data-ico="moon"></button>
+    </div>
+  </aside>
+
+  <div class="shell">
+    <header class="topbar">
+      <button class="ghost-icon only-mobile" id="menu-btn" data-ico="menu" aria-label="菜单"></button>
+      <div class="crumb" id="crumb"><span>文库</span></div>
+      <div class="top-actions" id="top-actions"></div>
+    </header>
+    <main id="view" class="view"></main>
+  </div>
+</div>
+
+<div id="modal-root"></div>
+<div id="toast-root" class="toast-root"></div>
+<div id="popover" class="popover" hidden></div>
+<div id="busy" class="busy" hidden><div class="busy-card"><div class="spinner"></div><strong id="busy-title">处理中…</strong><span id="busy-sub">请稍候</span><div class="busy-bar"><i id="busy-fill"></i></div><button class="btn ghost small" id="busy-cancel" hidden>取消</button></div></div>
+<div id="drop-veil" class="drop-veil" hidden><div><span data-ico="upload"></span><strong>松开即可导入</strong><em>PDF · 图片 · Word · PPT · Markdown · TXT</em></div></div>
+
+<script src="assets/vendor/pdfjs/pdf.min.js"></script>
+<script src="assets/vendor/mammoth.browser.min.js"></script>
+<script src="assets/vendor/jszip.min.js"></script>
+<script src="assets/js/util.js"></script>
+<script src="assets/js/db.js"></script>
+<script src="assets/js/tts.js"></script>
+<script src="assets/js/ai.js"></script>
+<script src="assets/js/translate.js"></script>
+<script src="assets/js/importer.js"></script>
+<script src="assets/js/reader.js"></script>
+<script src="assets/js/mindmap.js"></script>
+<script src="assets/js/annotate.js"></script>
+<script src="assets/data/knowledge.js"></script>
+<script src="assets/js/lab.js"></script>
+<script src="assets/js/review.js"></script>
+<script src="assets/js/demo.js"></script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>
