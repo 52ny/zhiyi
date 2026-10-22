@@ -407,52 +407,120 @@
           <em>PDF · 图片 · DOCX · PPTX · MD · TXT</em>
           <input type="file" id="file-input" multiple hidden accept=".pdf,.png,.jpg,.jpeg,.webp,.docx,.pptx,.md,.markdown,.txt,.html,.htm">
         </div>
+        <label class="wanted-box">希望提取什么（可选）
+          <input class="input" id="wanted-input" placeholder="例如：只要题目和选项、只提取公式与定义、去掉页眉页脚">
+        </label>
+        <div class="wanted-chips">
+          <button type="button" data-w="只保留正文，去掉页眉页脚、页码和广告">只要正文</button>
+          <button type="button" data-w="只提取题目、选项和答案解析">只要题目</button>
+          <button type="button" data-w="只提取公式、定理、定义与适用条件">只要公式定义</button>
+          <button type="button" data-w="只提取英文单词、音标和例句">只要单词</button>
+        </div>
         <div class="or-line"><span>或粘贴文本</span></div>
         <input class="input" id="paste-title" placeholder="标题（可选）">
         <textarea class="input area" id="paste-text" rows="6" placeholder="粘贴课文、知识点或笔记…"></textarea>
         <div class="paste-foot">
-          <span class="muted small">自动识别类型，导入后可改</span>
+          <span class="muted small">导入前可校对识别结果</span>
           <button class="btn primary" id="paste-import">导入文本</button>
         </div>
-        <div class="import-note">${Z.icon('info')}扫描件会自动 OCR，首次需加载模型。</div>
+        <div class="import-note">${Z.icon('info')}图片会先做灰度增强再 OCR；识别不准时可在下一步直接改字。</div>
       </div>`,
       footer: null
     });
 
     const dz = Z.$('#dropzone', m.root);
     const input = Z.$('#file-input', m.root);
+    const wantedOf = () => (Z.$('#wanted-input', m.root)?.value || '').trim();
     dz.addEventListener('click', () => input.click());
     input.addEventListener('change', async () => {
       if (!input.files?.length) return;
+      const wanted = wantedOf();
       m.close();
-      await importFiles(input.files);
+      await importFiles(input.files, wanted);
     });
     ['dragenter', 'dragover'].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.add('over'); }));
     ['dragleave', 'drop'].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.remove('over'); }));
     dz.addEventListener('drop', async (e) => {
-      if (e.dataTransfer.files?.length) { m.close(); await importFiles(e.dataTransfer.files); }
+      if (e.dataTransfer.files?.length) { const w = wantedOf(); m.close(); await importFiles(e.dataTransfer.files, w); }
     });
+    Z.$$('.wanted-chips button', m.root).forEach((b) => b.addEventListener('click', () => {
+      Z.$('#wanted-input', m.root).value = b.dataset.w;
+      Z.$$('.wanted-chips button', m.root).forEach((x) => x.classList.toggle('on', x === b));
+    }));
     Z.$('#paste-import', m.root).addEventListener('click', async () => {
       const text = Z.$('#paste-text', m.root).value.trim();
       if (!text) { Z.toast('粘贴内容为空', 'error'); return; }
       const title = Z.$('#paste-title', m.root).value.trim();
+      const wanted = wantedOf();
       m.close();
-      const doc = Z.Import.fromPlain(text, title);
-      await Z.DB.putDoc(doc);
-      Z.toast('已导入', 'ok');
-      location.hash = '#/doc/' + doc.id + '?tab=reader';
-      refresh();
+      const doc = Z.Import.fromPlain(text, title, { wanted });
+      openPreview(doc, wanted);
     });
     setTimeout(() => Z.$('#paste-text', m.root)?.focus(), 100);
   }
 
-  async function importFiles(files) {
-    const added = await Z.Import.handleFiles(files);
-    if (added.length) {
+  /* 提取结果校对：直接在导入前改错字 */
+  function openPreview(doc, wanted) {
+    const toText = (d) => d.blocks
+      .map((b) => {
+        if (b.t && b.t[0] === 'h') return '#'.repeat(Math.min(3, Number(b.t[1] || 2))) + ' ' + b.text;
+        return b.t === 'li' ? '- ' + b.text : b.text;
+      })
+      .join('\n\n');
+    const conf = doc.meta?.ocrConfidence;
+    const m = Z.modal({
+      title: '确认提取结果',
+      sub: '可先修改识别错误的文字，再导入',
+      wide: true,
+      body: `<div class="preview">
+        <div class="preview-meta">
+          <input class="input" id="pv-title" value="${Z.esc(doc.title)}" placeholder="标题">
+          <span class="muted small">${doc.blocks.length} 段${conf ? ' · OCR 置信度 ' + conf + '%' : ''}${wanted ? ' · 要求：' + Z.esc(wanted) : ''}</span>
+        </div>
+        <textarea class="input area" id="pv-text" rows="15">${Z.esc(toText(doc))}</textarea>
+        <div class="paste-foot">
+          ${Z.AI.isChat() ? '<button class="btn ghost small" id="pv-ai"><span data-ico="sparkle"></span>按描述重新整理</button>' : ''}
+          <span class="muted small">空行分段，## 表示标题</span>
+          <button class="btn ghost" id="pv-cancel">取消</button>
+          <button class="btn primary" id="pv-ok">确认导入</button>
+        </div>
+      </div>`,
+      footer: null
+    });
+    Z.hydrateIcons(m.root);
+    Z.$('#pv-cancel', m.root).addEventListener('click', () => m.close());
+    Z.$('#pv-ai', m.root)?.addEventListener('click', async () => {
+      const busy = Z.busy('正在按描述整理…', wanted || '整理成通顺正文');
+      try {
+        const next = await Z.Import.aiRefine(Object.assign({}, doc, { blocks: doc.blocks.slice() }), wanted);
+        Z.$('#pv-text', m.root).value = toText(next);
+        Z.toast('已重新整理，可继续校对', 'ok');
+      } catch (e) {
+        Z.toast(e.message, 'error', 4000);
+      } finally { busy.close(); }
+    });
+    Z.$('#pv-ok', m.root).addEventListener('click', async () => {
+      const text = Z.$('#pv-text', m.root).value.trim();
+      const title = Z.$('#pv-title', m.root).value.trim();
+      if (!text) { Z.toast('内容为空：可以粘贴文字或取消后重新导入', 'error'); return; }
+      const finalDoc = Z.Import.fromEdited(text, doc, title);
+      await Z.Import.saveDocs([finalDoc]);
+      m.close();
       await loadDocs();
-      if (added.length === 1) location.hash = '#/doc/' + added[0].id + '?tab=' + (added[0].type === 'knowledge' ? 'mindmap' : 'reader');
-      else { location.hash = '#/home'; refresh(); }
-    }
+      Z.toast('已导入「' + finalDoc.title + '」', 'ok');
+      location.hash = '#/doc/' + finalDoc.id + '?tab=' + (finalDoc.type === 'knowledge' ? 'mindmap' : 'reader');
+    });
+  }
+
+  async function importFiles(files, wanted = '') {
+    const added = await Z.Import.extractFiles(files, { wanted });
+    if (!added.length) return;
+    if (added.length === 1) { openPreview(added[0], wanted); return; }
+    await Z.Import.saveDocs(added);
+    await loadDocs();
+    Z.toast(`已导入 ${added.length} 份资料`, 'ok');
+    location.hash = '#/home';
+    refresh();
   }
 
   Z.openImport = openImport;

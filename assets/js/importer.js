@@ -51,6 +51,8 @@
   function headingLevel(line) {
     const s = line.trim();
     if (!s || s.length > 90) return 0;
+    // 选项、答案、解析不是标题
+    if (/^[A-DＡ-Ｄ][.、．)）]|^答案|^解析|^解[:：]|^第\s*\d+\s*页/.test(s)) return 0;
     if (/^第[一二三四五六七八九十百\d]+[章篇]|^Chapter\s|^Part\s/i.test(s)) return 1;
     if (/^[一二三四五六七八九十]+、|^\d+(?:\.\d+)?[、.\s]/.test(s)) return 2;
     if (HEADING_RE.test(s)) return 3;
@@ -89,6 +91,111 @@
     }
     flush();
     return out;
+  }
+
+  /* ---------- 按用户描述清理提取结果 ---------- */
+  const NOISE_RE = /^(第\s*\d+\s*页(\s*[/／共]\s*\d+\s*页)?|page\s*\d+(\s*(of|\/)\s*\d+)?|-{0,3}\s*\d{1,4}\s*-{0,3})$/i;
+  const JUNK_RE = /扫码|关注公众号|微信公众号|微信号|QQ群|点击关注|版权声明|侵权|广告|http(s)?:\/\/|www\./i;
+
+  function intentOf(wanted) {
+    const w = String(wanted || '');
+    if (!w.trim()) return '';
+    if (/题目|试题|试卷|选择题|填空题|选项|答案|解析|真题|练习/.test(w)) return 'quiz';
+    if (/公式|定理|定义|概念|知识点|要点|结论|原理|条件/.test(w)) return 'concept';
+    if (/单词|词汇|生词|英文|英语|外文/.test(w)) return 'words';
+    if (/翻译|译文|对照/.test(w)) return 'translate';
+    return 'plain';
+  }
+
+  function filterByWanted(blocks, wanted) {
+    const intent = intentOf(wanted);
+    if (!intent || intent === 'plain' || intent === 'translate') return blocks;
+    const keep = (b) => {
+      const t = b.text || '';
+      if (b.t && b.t[0] === 'h') return true;
+      if (intent === 'quiz') {
+        return /[A-DＡ-Ｄ][.、．)）]|^\s*[（(]?\d+[.、)）]|答案|解析|解[:：]|题干|选项|判断|填空|计算|证明|选择/.test(t) || t.length <= 80;
+      }
+      if (intent === 'concept') {
+        return /定义|定理|公式|性质|条件|结论|证明|推导|原理|概念|规律|=|≤|≥|√|∑|∫|Δ|⇌/.test(t);
+      }
+      if (intent === 'words') return /[A-Za-z]{3,}/.test(t);
+      return true;
+    };
+    const picked = blocks.filter(keep);
+    return picked.length >= Math.max(3, Math.ceil(blocks.length * 0.22)) ? picked : blocks;
+  }
+
+  /** 去页眉页脚、页码、跨页重复行，并按用户描述筛选 */
+  function cleanBlocks(blocks, wanted) {
+    let out = (blocks || []).filter((b) => b && b.text && b.text.trim());
+    out = out.filter((b) => {
+      const t = b.text.trim();
+      return !NOISE_RE.test(t) && !(JUNK_RE.test(t) && t.length < 60);
+    });
+    const counts = new Map();
+    out.forEach((b) => {
+      const k = b.text.trim();
+      if (k.length <= 40) counts.set(k, (counts.get(k) || 0) + 1);
+    });
+    out = out.filter((b) => !(b.text.trim().length <= 40 && (counts.get(b.text.trim()) || 0) >= 3));
+    return filterByWanted(out, wanted);
+  }
+
+  function blocksFromPlainText(text) {
+    const norm = String(text || '').replace(/\r/g, '').replace(/\t/g, ' ').trim();
+    if (!norm) return [];
+    const out = [];
+    const STANDALONE = /^([A-DＡ-Ｄ][.、．)）]|答案|解析|解[:：]|第?\s*\d+\s*[.、)）]|例题|注意|【|扫码|关注|版权|侵权|\(?\d+\)?\s)/;
+    norm.split(/\n{2,}/).forEach((para) => {
+      const lines = para.split('\n').map((x) => x.trim()).filter(Boolean);
+      let buf = [];
+      const flush = () => {
+        if (!buf.length) return;
+        const t = cleanInline(buf.join(' '));
+        buf = [];
+        if (t.length > 1) out.push({ t: 'p', text: t });
+      };
+      lines.forEach((line) => {
+        if (/^#{1,6}\s+/.test(line)) { flush(); out.push({ t: 'h2', text: line.replace(/^#+\s+/, '') }); return; }
+        if (BULLET_RE.test(line) && line.length <= 90) { flush(); out.push({ t: 'li', text: line.replace(BULLET_RE, '').trim() }); return; }
+        const lvl = headingLevel(line);
+        if (lvl && line.length <= 40) { flush(); out.push({ t: 'h' + Math.min(lvl, 3), text: line }); return; }
+        buf.push(line);
+        // 题目、选项、答案、广告、页码等短行独立成块，便于后续按描述过滤
+        if (STANDALONE.test(line) || line.length <= 48) flush();
+        else if (END_PUNCT.test(line) && buf.join(' ').length > 40) flush();
+      });
+      flush();
+    });
+    return out;
+  }
+
+  /** 用校对后的文本重建资料 */
+  function fromEdited(text, doc, title) {
+    const next = Object.assign({}, doc, {
+      title: title || doc.title,
+      blocks: blocksFromPlainText(text),
+      updatedAt: Date.now()
+    });
+    return finishDoc(next);
+  }
+
+  /** 用 AI 按用户描述重组（需本地模型或云端接口） */
+  async function aiRefine(doc, wanted) {
+    if (!Z.AI || !Z.AI.isChat || !Z.AI.isChat()) throw new Error('需要本地模型或云端接口');
+    const text = (doc.blocks || []).map((b) => b.text).join('\n').slice(0, 9000);
+    const raw = await Z.AI.chat([
+      { role: 'system', content: '你是文本整理助手，只输出严格 JSON，不编造原文没有的内容。' },
+      { role: 'user', content: `从下面提取结果中，按用户要求保留与整理内容。\n用户要求：${wanted || '整理成通顺的正文'}\n输出：{"blocks":[{"t":"h2|h3|p|li","text":"..."}]}\n提取结果：\n${text}` }
+    ], { json: true, maxTokens: 2200 });
+    const data = Z.AI.parseJSON(raw);
+    const blocks = (data.blocks || [])
+      .filter((b) => b && b.text)
+      .map((b) => ({ t: ['h1', 'h2', 'h3', 'p', 'li', 'quote'].includes(b.t) ? b.t : 'p', text: String(b.text).trim() }));
+    if (!blocks.length) throw new Error('没有整理出可用内容');
+    doc.blocks = blocks;
+    return finishDoc(doc);
   }
 
   function detectType(blocks, lang) {
@@ -154,13 +261,53 @@
       }
     };
     ocrWorker = await T.createWorker('chi_sim+eng', 1, options);
+    try { await ocrWorker.setParameters({ preserve_interword_spaces: '1' }); } catch (e) {}
     return ocrWorker;
+  }
+
+  /** 灰度 + 对比度拉伸 + 放大：显著提升截图/拍照的识别率 */
+  function enhanceForOcr(source) {
+    const w0 = source.naturalWidth || source.width;
+    const h0 = source.naturalHeight || source.height;
+    if (!w0 || !h0) return source;
+    const scale = Math.min(3, Math.max(1, 1400 / w0, w0 < 900 ? 1400 / w0 : 1));
+    const c = document.createElement('canvas');
+    c.width = Math.min(3000, Math.round(w0 * scale));
+    c.height = Math.round(h0 * (c.width / w0));
+    const g = c.getContext('2d', { willReadFrequently: true });
+    g.imageSmoothingEnabled = true;
+    g.imageSmoothingQuality = 'high';
+    g.drawImage(source, 0, 0, c.width, c.height);
+    try {
+      const img = g.getImageData(0, 0, c.width, c.height);
+      const d = img.data;
+      let min = 255, max = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        const v = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) | 0;
+        if (v < min) min = v;
+        if (v > max) max = v;
+      }
+      const range = Math.max(1, max - min);
+      const stretch = range < 190;
+      for (let i = 0; i < d.length; i += 4) {
+        let v = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+        if (stretch) v = ((v - min) / range) * 255;
+        else v = 128 + (v - 128) * 1.15;
+        v = v < 0 ? 0 : v > 255 ? 255 : v;
+        d[i] = d[i + 1] = d[i + 2] = v;
+      }
+      g.putImageData(img, 0, 0);
+    } catch (e) {}
+    return c;
   }
 
   async function ocrImage(source, onProgress) {
     const worker = await getOcrWorker(onProgress);
-    const res = await worker.recognize(source);
-    return (res.data?.text || '').replace(/\r/g, '');
+    const res = await worker.recognize(source, {}, { text: true, blocks: false });
+    return {
+      text: (res.data?.text || '').replace(/\r/g, ''),
+      confidence: Math.round(res.data?.confidence || 0)
+    };
   }
 
   /* ---------- 图片 ---------- */
@@ -193,15 +340,20 @@
     const cover = await coverFromImage(img);
     ctx.progress(16, '正在识别文字（首次需加载 OCR 引擎）…');
     let text = '';
+    let conf = 0;
     try {
-      text = await ocrImage(img, (m) => {
+      const enhanced = enhanceForOcr(img);
+      const r = await ocrImage(enhanced, (m) => {
         if (m.status === 'recognizing text') ctx.progress(20 + Math.round(m.progress * 70), '识别文字 ' + Math.round(m.progress * 100) + '%');
       });
+      text = r.text;
+      conf = r.confidence;
     } catch (e) {
       text = '';
     }
     const doc = makeDoc({ title: file.name.replace(/\.[^.]+$/, ''), source: 'image', lang: 'zh', cover });
     doc.meta.ocr = true;
+    doc.meta.ocrConfidence = conf;
     // 图片本身可作为批注底图
     const blobId = Z.uid('blob');
     await Z.DB.putBlob(blobId, file);
@@ -298,10 +450,10 @@
         ctx.progress(72 + Math.round((n / limit) * 26), `OCR ${n}/${limit} 页`);
         try {
           const canvas = await renderPdfPage(pdf, n, 2);
-          const text = await ocrImage(canvas, (m) => {
+          const r = await ocrImage(enhanceForOcr(canvas), (m) => {
             if (m.status === 'recognizing text') ctx.progress(72 + Math.round(((n - 1 + m.progress) / limit) * 26), `OCR ${n}/${limit} 页 · ${Math.round(m.progress * 100)}%`);
           });
-          const lines = text.split(/\n+/).map((s) => cleanInline(s)).filter(Boolean);
+          const lines = r.text.split(/\n+/).map((s) => cleanInline(s)).filter(Boolean);
           doc.blocks = doc.blocks.concat(blocksFromLines(lines, n));
         } catch (e) {
           doc.blocks.push({ t: 'p', text: `第 ${n} 页 OCR 失败，请在手绘标签中查看原页。`, page: n });
@@ -412,28 +564,9 @@
   }
 
   /* ---------- 纯文本 ---------- */
-  function fromPlain(text, title) {
-    const norm = text.replace(/\r/g, '').replace(/\t/g, ' ').trim();
-    let paras = norm.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
-    if (paras.length <= 1) {
-      const lines = norm.split('\n').map((x) => x.trim()).filter(Boolean);
-      paras = [];
-      let buf = [];
-      for (const line of lines) {
-        if (/^(#{1,6})\s+/.test(line)) { if (buf.length) { paras.push(buf.join(' ')); buf = []; } paras.push('§H§' + line.replace(/^#+\s+/, '')); continue; }
-        buf.push(line);
-        if (END_PUNCT.test(line) && buf.join('').length > 30) { paras.push(buf.join(' ')); buf = []; }
-      }
-      if (buf.length) paras.push(buf.join(' '));
-    }
-    const blocks = paras.map((p) => {
-      if (p.startsWith('§H§')) return { t: 'h2', text: p.slice(3) };
-      const lvl = headingLevel(p);
-      if (lvl && p.length < 40) return { t: 'h' + Math.min(lvl, 3), text: p };
-      if (BULLET_RE.test(p)) return { t: 'li', text: p.replace(BULLET_RE, '') };
-      return { t: 'p', text: cleanInline(p.replace(/\n/g, ' ')) };
-    }).filter((b) => b.text);
-    const doc = makeDoc({ title: title || '粘贴的内容', source: 'txt', blocks, meta: { pages: 1 } });
+  function fromPlain(text, title, opts = {}) {
+    const blocks = cleanBlocks(blocksFromPlainText(text), opts.wanted);
+    const doc = makeDoc({ title: title || '粘贴的内容', source: 'txt', blocks, meta: { pages: 1, wanted: opts.wanted || '' } });
     if (!title) {
       const h = blocks.find((b) => b.t[0] === 'h');
       doc.title = h ? h.text : Z.truncate(blocks[0]?.text || '未命名资料', 28);
@@ -472,14 +605,14 @@
     throw new Error('不支持的文件类型：' + (ext || file.type || '未知'));
   }
 
-  async function handleFiles(files, opts = {}) {
+  async function extractFiles(files, opts = {}) {
     const arr = Array.from(files || []);
     if (!arr.length) return [];
     const docs = [];
     for (let i = 0; i < arr.length; i++) {
       const file = arr[i];
       if (file.size > 80 * 1024 * 1024) { Z.toast(`${file.name} 超过 80MB，已跳过`, 'error'); continue; }
-      const b = Z.busy(`导入 ${file.name}`, `(${i + 1}/${arr.length}) 准备中…`);
+      const b = Z.busy(`解析 ${file.name}`, `(${i + 1}/${arr.length}) 准备中…`);
       try {
         const ctx = {
           progress: (pct, sub) => b.set(pct, sub),
@@ -488,21 +621,39 @@
         };
         const doc = await fromFile(file, ctx);
         if (b.cancelled) { b.close(); continue; }
-        await Z.DB.putDoc(doc);
+        doc.blocks = cleanBlocks(doc.blocks, opts.wanted);
+        doc.meta = Object.assign(doc.meta || {}, { wanted: opts.wanted || '' });
+        finishDoc(doc);
         docs.push(doc);
         b.close();
-        Z.toast(`已导入「${doc.title}」`, 'ok');
       } catch (e) {
         b.close();
         console.error(e);
-        Z.toast(`${file.name} 导入失败：${e.message}`, 'error', 4200);
+        Z.toast(`${file.name} 解析失败：${e.message}`, 'error', 4200);
       }
     }
     return docs;
   }
 
+  async function saveDocs(docs) {
+    const saved = [];
+    for (const doc of docs || []) {
+      await Z.DB.putDoc(doc);
+      saved.push(doc);
+    }
+    return saved;
+  }
+
+  async function handleFiles(files, opts = {}) {
+    const docs = await extractFiles(files, opts);
+    await saveDocs(docs);
+    docs.forEach((doc) => Z.toast(`已导入「${doc.title}」`, 'ok'));
+    return docs;
+  }
+
   Z.Import = {
-    handleFiles, fromFile, fromPlain, fromMarkdown, fromHtml, fromImage, fromPdf,
-    makeDoc, finishDoc, detectType, loadImage, ocrImage, getOcrWorker, coverFromImage
+    handleFiles, extractFiles, saveDocs, fromFile, fromPlain, fromMarkdown, fromHtml, fromImage, fromPdf,
+    makeDoc, finishDoc, detectType, loadImage, ocrImage, getOcrWorker, coverFromImage, enhanceForOcr,
+    cleanBlocks, blocksFromPlainText, fromEdited, aiRefine, intentOf
   };
 })(window.ZY);
