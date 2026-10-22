@@ -80,7 +80,9 @@
       variants: data.variants || [],
       extensions: data.extensions || [],
       relations: data.relations || [],
-      quiz: data.quiz || []
+      quiz: data.quiz || [],
+      source: data.source || '',
+      url: data.url || ''
     };
   }
 
@@ -179,19 +181,19 @@
 
     const el = Z.$('#lab-result');
     if (useAI) {
-      const busy = Z.busy('AI 正在拆解「' + concept + '」', '本质 · 条件 · 变式 · 迁移');
+      const label = Z.AI.isOnline() ? '正在检索在线知识库「' + concept + '」' : 'AI 正在拆解「' + concept + '」';
+      const busy = Z.busy(label, Z.AI.isOnline() ? '百度百科 · 萌娘百科' : '本质 · 条件 · 变式 · 迁移');
       try {
         const data = await Z.AI.explain(concept, state.subject === '自动' ? guessSubject(concept) : state.subject, '');
         state.result = normalizeAI(data, concept, state.subject);
-        state.source = 'AI 讲解';
+        state.source = data.source ? '在线知识库 · ' + data.source : 'AI 讲解';
         busy.close();
         renderResult();
         Z.toast('AI 讲解已生成', 'ok');
         return;
       } catch (err) {
         busy.close();
-        Z.toast('AI 讲解失败：' + err.message, 'error', 4200);
-        if (!local) return;
+        Z.toast('在线检索失败：' + err.message, 'error', 5000);
       }
     }
 
@@ -221,13 +223,14 @@
 
     el.innerHTML = `<article class="lab-result-card">
       ${state.source === '通用拆解框架' ? `<div class="ai-cta">
-        <div><strong>这只是通用模板</strong><span>内置库未收录，加载浏览器内模型后，可对任意知识点给出公式、条件与拓展。</span></div>
-        <button class="btn primary small" data-lab="go-ai">加载本地模型</button>
+        <div><strong>这只是通用模板</strong><span>没有检索到该知识点。可换个说法再试，或在设置中切换本地模型 / 云端接口获得生成式讲解。</span></div>
+        <button class="btn primary small" data-lab="go-ai">去设置</button>
       </div>` : ''}
       <header class="lab-hero">
         <div class="lh-tag">${esc(r.subject || '综合')} · ${esc(state.source)}</div>
         <h2>${esc(r.name)}</h2>
         <p class="lh-essence">${esc(r.essence)}</p>
+        ${r.url ? `<a class="src-link" href="${esc(r.url)}" target="_blank" rel="noopener">来源：${esc(r.source || '在线知识库')} ↗</a>` : ''}
         <div class="lh-actions">
           <button class="btn primary small" data-lab="save"><span data-ico="book"></span>保存到文库</button>
           <button class="btn ghost small" data-lab="export"><span data-ico="download"></span>导出笔记</button>
@@ -266,7 +269,7 @@
         <p class="muted small">用自己的话讲一遍，再自检缺口。</p>
         <textarea class="input area" id="feynman-input" rows="5" placeholder="我这样理解「${esc(r.name)}」…">${esc(state.feynman)}</textarea>
         <div class="feynman-actions">
-          <button class="btn primary small" data-lab="feynman"><span data-ico="sparkle"></span>${Z.AI.isReady() ? 'AI 点评我的解释' : '自检我的解释'}</button>
+          <button class="btn primary small" data-lab="feynman"><span data-ico="sparkle"></span>${Z.AI.isChat() ? 'AI 点评我的解释' : '自检我的解释'}</button>
         </div>
         <div id="feynman-out"></div>
       </section>
@@ -285,7 +288,7 @@
     const r = state.result;
     const out = Z.$('#feynman-out');
 
-    if (Z.AI.isReady()) {
+    if (Z.AI.isChat()) {
       out.innerHTML = `<div class="fb-loading"><span class="spinner small"></span> AI 正在阅读你的解释…</div>`;
       try {
         const fb = await Z.AI.feynman(r.name, text);

@@ -487,8 +487,8 @@
       return;
     }
     if (act === 'ai') {
-      if (!Z.AI.isReady()) {
-        Z.toast('请先在设置中加载本地模型或填写 API Key', 'error');
+      if (!Z.AI.isChat()) {
+        Z.toast('AI 导图需要本地模型或云端接口；在线知识库只用于知识点拆解', 'error');
         location.hash = '#/settings';
         return;
       }

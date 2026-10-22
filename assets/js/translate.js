@@ -86,7 +86,7 @@
     });
     if (!pending.length) return out;
 
-    if (Z.AI.isReady()) {
+    if (Z.AI.isChat()) {
       try {
         const chunks = [];
         for (let k = 0; k < pending.length; k += 12) chunks.push(pending.slice(k, k + 12));

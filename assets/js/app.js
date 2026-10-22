@@ -497,6 +497,10 @@
               ${Object.entries(Z.AI.PRESETS).map(([k, v]) => `<option value="${k}" ${ai.provider === k ? 'selected' : ''}>${v.label}</option>`).join('')}
             </select>
           </label>
+          <div class="span2 local-panel" id="online-panel" ${ai.provider === 'online' ? '' : 'hidden'}>
+            <div class="local-status">免下载、免 Key：检索百度百科与萌娘百科，整理成定义、公式、条件、变式与自测，并保留来源链接。</div>
+            <div class="local-status">需要联网。若检索不到或网络受限，可切换到本地模型或云端接口。</div>
+          </div>
           <div class="span2 local-panel" id="local-panel" ${ai.provider === 'local' ? '' : 'hidden'}>
             <div class="local-row">
               <select id="local-model">
@@ -512,7 +516,7 @@
               <button class="btn ghost small" id="local-mirror-save">保存源</button>
             </div>
           </div>
-          <div class="span2 api-fields" id="api-fields" ${ai.provider === 'local' ? 'hidden' : ''}>
+          <div class="span2 api-fields" id="api-fields" ${ai.provider === 'local' || ai.provider === 'online' ? 'hidden' : ''}>
             <div class="set-grid">
               <label>模型
                 <input class="input" id="ai-model" value="${Z.esc(ai.model)}" placeholder="deepseek-chat">
@@ -531,7 +535,11 @@
           <button class="btn ghost small" id="ai-test">测试</button>
           <span class="set-status" id="ai-status">${Z.AI.isReady() ? '可用 · ' + Z.esc(Z.AI.label()) : '未就绪'}</span>
         </div>
-        <p class="set-hint" id="ai-hint">${ai.provider === 'local' ? '首次加载需下载模型（约 480MB），之后缓存在本机，可离线使用。' : '浏览器直连需服务商允许跨域。'}</p>
+        <p class="set-hint" id="ai-hint">${ai.provider === 'local'
+          ? '首次加载需下载模型（约 480MB），之后缓存在本机，可离线使用。'
+          : ai.provider === 'online'
+            ? '在线知识库：不下载模型、不需要 Key，直接检索公开百科。'
+            : '浏览器直连需服务商允许跨域。'}</p>
       </section>
 
       <section class="set-card">
@@ -598,14 +606,18 @@
     Z.$('#ai-provider').addEventListener('change', (e) => {
       const v = e.target.value;
       const isLocal = v === 'local';
+      const isOnline = v === 'online';
       Z.$('#local-panel').hidden = !isLocal;
-      Z.$('#api-fields').hidden = isLocal;
+      Z.$('#online-panel').hidden = !isOnline;
+      Z.$('#api-fields').hidden = isLocal || isOnline;
       const hint = Z.$('#ai-hint');
       if (hint) hint.textContent = isLocal
         ? '首次加载需下载模型（约 480MB），之后缓存在本机，可离线使用。'
-        : '浏览器直连需服务商允许跨域。';
+        : isOnline
+          ? '在线知识库：不下载模型、不需要 Key，直接检索公开百科。'
+          : '浏览器直连需服务商允许跨域。';
       const p = Z.AI.PRESETS[v];
-      if (p && !isLocal) {
+      if (p && !isLocal && !isOnline) {
         Z.$('#ai-base').value = p.baseUrl;
         Z.$('#ai-model').value = p.model;
       }
@@ -643,6 +655,8 @@
       const patch = { provider };
       if (provider === 'local') {
         patch.model = Z.$('#local-model')?.value || Z.AI.PRESETS.local.model;
+      } else if (provider === 'online') {
+        patch.model = Z.AI.PRESETS.online.model;
       } else {
         patch.model = Z.$('#ai-model').value.trim();
         patch.baseUrl = Z.$('#ai-base').value.trim();

@@ -1,6 +1,7 @@
 /* 知忆 · AI 能力（可选，用户自带 Key） */
 (function (Z) {
   const PRESETS = {
+    online: { label: '在线知识库（免下载、免 Key）', baseUrl: '', model: 'baike+moegirl' },
     local: { label: '本地模型（浏览器内）', baseUrl: '', model: 'onnx-community/Qwen2.5-0.5B-Instruct' },
     deepseek: { label: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
     openai: { label: 'OpenAI', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
@@ -9,8 +10,8 @@
 
   function cfg() {
     const c = Z.store.get('ai', {});
-    const provider = c.provider || 'local';
-    const preset = PRESETS[provider] || PRESETS.local;
+    const provider = c.provider || 'online';
+    const preset = PRESETS[provider] || PRESETS.online;
     return {
       provider,
       baseUrl: c.baseUrl || preset.baseUrl,
@@ -27,11 +28,19 @@
   }
 
   function isLocal() { return cfg().provider === 'local'; }
+  function isOnline() { return cfg().provider === 'online'; }
 
   function isReady() {
+    if (isOnline()) return true;
     if (isLocal()) return !!(Z.LocalAI && Z.LocalAI.ready);
     const c = cfg();
     return !!(c.apiKey && c.baseUrl && c.model);
+  }
+
+  /** 是否能做自由对话（在线知识库只能拆解知识点） */
+  function isChat() {
+    if (isOnline()) return false;
+    return isReady();
   }
 
   function endpoint() {
@@ -66,6 +75,7 @@
 
   async function chat(messages, opts = {}) {
     const c = cfg();
+    if (isOnline()) throw new Error('当前是「在线知识库」模式，只支持知识点拆解；翻译、出题请切换本地模型或云端接口');
     if (!isReady()) throw new Error(isLocal() ? '本地模型尚未加载：请到「设置 → AI 增强」点“加载模型”' : '尚未配置 AI：请到「设置 → AI 增强」填写 API Key');
     if (isLocal()) {
       const msgs = opts.json
@@ -106,6 +116,10 @@
   }
 
   async function test() {
+    if (isOnline()) {
+      const d = await Z.WebKB.baike('勾股定理');
+      return '在线知识库可用（' + d.source + '）';
+    }
     const txt = await chat([
       { role: 'system', content: '你是测试助手，只回复两个字：正常' },
       { role: 'user', content: '请回复：正常' }
@@ -147,6 +161,11 @@
   }
 
   async function explain(concept, subject, extra) {
+    if (isOnline()) {
+      if (!Z.WebKB) throw new Error('在线知识库未加载');
+      const sub = !subject || subject === '自动' ? '综合' : subject;
+      return Z.WebKB.explain(concept, sub);
+    }
     const raw = await chat([
       { role: 'system', content: '你是一位善于把复杂概念讲透的老师。请用中文输出严格 JSON，不要输出 JSON 以外的内容。' },
       { role: 'user', content: `请解释知识点「${concept}」${subject ? '（学科：' + subject + '）' : ''}。
@@ -208,9 +227,10 @@ ${text.slice(0, 5000)}
   }
 
   Z.AI = {
-    PRESETS, cfg, save, isReady, isLocal, chat, test, translate, explain, feynman, mindmap, cards, parseJSON,
+    PRESETS, cfg, save, isReady, isChat, isLocal, isOnline, chat, test, translate, explain, feynman, mindmap, cards, parseJSON,
     label() {
       const c = cfg();
+      if (c.provider === 'online') return '在线知识库 · 百度百科/萌娘百科';
       if (c.provider === 'local') {
         const s = Z.LocalAI?.snapshot?.();
         return s?.ready ? '浏览器内 · ' + (s.model?.name || '本地模型') : '浏览器内 · 未加载';
