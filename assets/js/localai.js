@@ -18,11 +18,18 @@
     onProgress: null
   };
 
+  const listeners = new Set();
+
   function emit(patch) {
     Object.assign(state, patch || {});
-    if (typeof state.onProgress === 'function') {
-      try { state.onProgress(snapshot()); } catch (e) {}
-    }
+    const snap = snapshot();
+    listeners.forEach((fn) => { try { fn(snap); } catch (e) {} });
+  }
+
+  function subscribe(fn) {
+    if (typeof fn !== 'function') return () => {};
+    listeners.add(fn);
+    return () => listeners.delete(fn);
   }
 
   function snapshot() {
@@ -156,7 +163,8 @@
     load,
     unload,
     chat,
-    setProgressHandler(fn) { state.onProgress = fn; },
+    subscribe,
+    setProgressHandler(fn) { subscribe(fn); },
     detectDevice
   };
 })(window.ZY);
