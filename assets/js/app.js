@@ -72,103 +72,136 @@
     if (ai && Z.AI.isLocal()) ai.textContent = snap.ready ? '可用 · ' + Z.AI.label() : '未就绪';
   }
 
-  /* ---------- 一键下载离线 AI ---------- */
+  /* ---------- AI 助手（默认内置智能体，无需下载） ---------- */
   function updateAiUI(snap) {
     const s = snap || Z.LocalAI.snapshot();
+    const cfg = Z.AI.cfg();
+    const ready = Z.AI.isReady();
+    const online = cfg.provider === 'online';
+    const localPending = cfg.provider === 'local' && !s.ready;
     const btn = Z.$('#rail-ai');
     const label = Z.$('#rail-ai-label');
     const fill = Z.$('#rail-ai-fill');
     if (btn && label) {
-      btn.classList.toggle('loading', !!s.loading);
-      btn.classList.toggle('ready', !!s.ready);
-      btn.disabled = !!s.loading;
-      label.textContent = s.ready
-        ? 'AI 已就绪'
-        : s.loading
-          ? '下载中 ' + (s.progress || 0) + '%'
-          : s.error ? '下载失败 · 重试' : '下载离线 AI';
-      if (fill) fill.style.width = (s.ready ? 100 : s.progress || 0) + '%';
-      btn.title = s.ready
-        ? '离线 AI 已就绪，点击去知识工坊'
-        : s.loading ? (s.status || '下载中…') : '一键下载，约 480MB，之后离线可用';
+      btn.classList.toggle('loading', !!s.loading && localPending);
+      btn.classList.toggle('ready', ready);
+      btn.disabled = !!s.loading && localPending;
+      label.textContent = localPending
+        ? (s.loading ? '下载中 ' + (s.progress || 0) + '%' : s.error ? '下载失败 · 重试' : '下载离线 AI')
+        : online ? '在线知识库' : ready ? 'AI 已就绪' : '启用 AI';
+      if (fill) fill.style.width = (ready ? 100 : s.progress || 0) + '%';
+      btn.title = ready
+        ? 'AI 已就绪，点击去知识工坊'
+        : localPending ? (s.status || '下载中…') : '启用内置智能体（免下载、免 Key）';
     }
     const hero = Z.$('#home-ai');
     if (hero) {
-      hero.textContent = s.ready ? '离线 AI 已就绪' : s.loading ? '下载中 ' + (s.progress || 0) + '%' : '一键下载离线 AI';
-      hero.disabled = !!s.loading;
+      hero.textContent = ready ? 'AI 已就绪' : s.loading ? '下载中 ' + (s.progress || 0) + '%' : '启用 AI 助手';
+      hero.disabled = !!s.loading && localPending;
     }
   }
 
-  async function downloadAI() {
+  async function enableAI() {
     const s = Z.LocalAI.snapshot();
-    if (s.ready) { location.hash = '#/lab'; return; }
-    if (s.loading) { openAiModal(); return; }
-    const model = 'onnx-community/Qwen2.5-0.5B-Instruct';
-    Z.AI.save({ provider: 'local', model });
+    if (s.loading && Z.AI.cfg().provider === 'local') { openAiModal(); return; }
+    if (Z.AI.isReady()) { location.hash = '#/lab'; return; }
     openAiModal();
-    const snap = await Z.LocalAI.load(model);
-    updateAiUI(snap);
-    if (snap.ready) Z.toast('离线 AI 已就绪，可以讲解任意知识点了', 'ok');
   }
 
   function openAiModal() {
+    const current = Z.AI.label();
     const m = Z.modal({
-      title: '离线 AI',
-      sub: '点一下开始下载；只下载一次，之后断网也能讲题',
+      title: 'AI 助手',
+      sub: '默认使用内置智能体：免下载、免 Key，打开即用',
       body: `<div class="ai-dl">
         <div class="ai-dl-top">
           <span class="ai-dl-ico">${Z.icon('sparkle')}</span>
           <div>
-            <strong>Qwen2.5 0.5B</strong>
-            <span>约 480MB · 自动缓存到本机 · 无需任何配置</span>
+            <strong>内置智能体 · GPT-OSS 20B</strong>
+            <span>由公共推理服务提供 · 不需要下载、不需要 Key</span>
           </div>
         </div>
-        <div class="ai-dl-bar"><i id="ai-dl-fill"></i></div>
-        <div class="ai-dl-status" id="ai-dl-status">准备中…</div>
+        <div class="ai-dl-status" id="ai-dl-status">当前：${Z.esc(current)}</div>
         <div class="ai-dl-actions">
-          <button class="btn primary small" id="ai-dl-retry" hidden>重试</button>
-          <button class="btn ghost small" id="ai-dl-online">改用在线知识库</button>
+          <button class="btn primary small" id="ai-use-agent">立即使用</button>
+          <button class="btn ghost small" id="ai-test-btn">测试连接</button>
+          <button class="btn ghost small" id="ai-use-online">在线知识库</button>
+          <button class="btn ghost small" id="ai-download">下载离线模型</button>
+        </div>
+        <div class="ai-dl-bar" id="ai-dl-bar" hidden><i id="ai-dl-fill"></i></div>
+        <div class="ai-dl-actions" id="ai-dl-local-actions" hidden>
+          <button class="btn ghost small" id="ai-dl-retry" hidden>重试下载</button>
           <button class="btn primary small" id="ai-dl-go" hidden>去知识工坊</button>
         </div>
         <details class="ai-dl-adv">
-          <summary>下载失败？换模型源</summary>
+          <summary>下载离线模型失败？换模型源</summary>
           <div class="local-row">
             <input class="input" id="ai-dl-mirror" value="${Z.esc(Z.LocalAI.mirrorHost())}" placeholder="https://hf-mirror.com">
             <button class="btn ghost small" id="ai-dl-mirror-save">保存并重试</button>
           </div>
-          <p class="set-hint">默认为 hf-mirror.com；若所在网络不可达，可填其他 HuggingFace 镜像。</p>
+          <p class="set-hint">离线模型约 480MB，仅在需要断网使用时才下载；日常用内置智能体即可。</p>
         </details>
       </div>`,
       footer: null
     });
+    const st = (t) => { const el = Z.$('#ai-dl-status', m.root); if (el) el.textContent = t; };
     const paint = (snap) => {
       const fill = Z.$('#ai-dl-fill', m.root);
-      const st = Z.$('#ai-dl-status', m.root);
-      const retry = Z.$('#ai-dl-retry', m.root);
+      const bar = Z.$('#ai-dl-bar', m.root);
+      const re = Z.$('#ai-dl-retry', m.root);
       const go = Z.$('#ai-dl-go', m.root);
+      const act = Z.$('#ai-dl-local-actions', m.root);
       if (!fill) return;
+      if (snap.loading || snap.ready || (snap.progress > 0 && Z.AI.cfg().provider === 'local')) {
+        bar.hidden = false; act.hidden = false;
+      }
       fill.style.width = (snap.ready ? 100 : snap.progress || 0) + '%';
       fill.classList.toggle('done', !!snap.ready);
-      if (st) st.textContent = snap.ready ? '已就绪，可以开始讲解知识点了' : (snap.status || (snap.loading ? '下载中…' : '准备中…'));
-      if (retry) retry.hidden = !(snap.error && !snap.loading);
+      if (Z.AI.cfg().provider !== 'local') return;
+      st(snap.ready ? '离线模型已就绪' : (snap.status || (snap.loading ? '下载中…' : '未加载')));
+      if (re) re.hidden = !(snap.error && !snap.loading);
       if (go) go.hidden = !snap.ready;
-      if (snap.ready) {
-        const sub = Z.$('.ai-dl-top span', m.root);
-        if (sub) sub.textContent = (snap.device === 'webgpu' ? 'GPU 加速' : 'CPU 推理') + ' · 已缓存到本机';
-      }
     };
     const un = Z.LocalAI.subscribe(paint);
     paint(Z.LocalAI.snapshot());
     const origClose = m.close;
     m.close = () => { un(); origClose(); };
-    Z.$('#ai-dl-retry', m.root).onclick = () => Z.LocalAI.load(Z.LocalAI.snapshot().modelId);
-    Z.$('#ai-dl-go', m.root).onclick = () => { m.close(); location.hash = '#/lab'; };
-    Z.$('#ai-dl-online', m.root).onclick = () => {
+
+    Z.$('#ai-use-agent', m.root).onclick = () => {
+      Z.AI.save({ provider: 'agent', model: 'openai' });
+      m.close();
+      updateAiUI();
+      Z.toast('已启用内置智能体', 'ok');
+      location.hash = '#/lab';
+    };
+    Z.$('#ai-test-btn', m.root).onclick = async () => {
+      st('测试中…');
+      try {
+        const r = await Z.AI.test();
+        st('连接正常：' + r);
+        Z.toast('AI 可用', 'ok');
+      } catch (e) {
+        st('失败：' + e.message);
+      }
+    };
+    Z.$('#ai-use-online', m.root).onclick = () => {
       Z.AI.save({ provider: 'online' });
       m.close();
+      updateAiUI();
       Z.toast('已切到在线知识库，免下载', 'ok');
       route();
     };
+    Z.$('#ai-download', m.root).onclick = async () => {
+      Z.AI.save({ provider: 'local', model: 'onnx-community/Qwen2.5-0.5B-Instruct' });
+      Z.$('#ai-dl-bar', m.root).hidden = false;
+      Z.$('#ai-dl-local-actions', m.root).hidden = false;
+      st('开始下载…');
+      paint(Z.LocalAI.snapshot());
+      await Z.LocalAI.load('onnx-community/Qwen2.5-0.5B-Instruct');
+      updateAiUI();
+    };
+    Z.$('#ai-dl-retry', m.root).onclick = () => Z.LocalAI.load(Z.LocalAI.snapshot().modelId);
+    Z.$('#ai-dl-go', m.root).onclick = () => { m.close(); location.hash = '#/lab'; };
     Z.$('#ai-dl-mirror-save', m.root).onclick = () => {
       const v = Z.$('#ai-dl-mirror', m.root).value.trim();
       Z.store.set('local.mirror', v || Z.LocalAI.MIRROR);
@@ -241,7 +274,7 @@
           <p>导入文件即得导图、双语与卡片。全部保存在本机。</p>
           <div class="hero-actions">
             <button class="btn primary" data-import><span data-ico="upload"></span>导入第一份资料</button>
-            <button class="btn ghost" id="home-ai" data-download-ai><span data-ico="sparkle"></span>一键下载离线 AI</button>
+            <button class="btn ghost" id="home-ai" data-download-ai><span data-ico="sparkle"></span>启用 AI 助手</button>
           </div>
           <div class="hero-chips">
             <span>双语对照</span><span>点词朗读</span><span>思维导图</span><span>手绘批注</span><span>主动回忆</span><span>间隔复习</span>
@@ -674,6 +707,10 @@
               ${Object.entries(Z.AI.PRESETS).map(([k, v]) => `<option value="${k}" ${ai.provider === k ? 'selected' : ''}>${v.label}</option>`).join('')}
             </select>
           </label>
+          <div class="span2 local-panel" id="agent-panel" ${ai.provider === 'agent' ? '' : 'hidden'}>
+            <div class="local-status">内置智能体（GPT-OSS 20B）：免下载、免 Key，直接讲解、出题与翻译。</div>
+            <div class="local-status">由公共推理服务提供；若网络无法访问，会自动退回在线知识库。</div>
+          </div>
           <div class="span2 local-panel" id="online-panel" ${ai.provider === 'online' ? '' : 'hidden'}>
             <div class="local-status">免下载、免 Key：检索百度百科与萌娘百科，整理成定义、公式、条件、变式与自测，并保留来源链接。</div>
             <div class="local-status">需要联网。若检索不到或网络受限，可切换到本地模型或云端接口。</div>
@@ -693,7 +730,7 @@
               <button class="btn ghost small" id="local-mirror-save">保存源</button>
             </div>
           </div>
-          <div class="span2 api-fields" id="api-fields" ${ai.provider === 'local' || ai.provider === 'online' ? 'hidden' : ''}>
+          <div class="span2 api-fields" id="api-fields" ${['local', 'online', 'agent'].includes(ai.provider) ? 'hidden' : ''}>
             <div class="set-grid">
               <label>模型
                 <input class="input" id="ai-model" value="${Z.esc(ai.model)}" placeholder="deepseek-chat">
@@ -712,11 +749,13 @@
           <button class="btn ghost small" id="ai-test">测试</button>
           <span class="set-status" id="ai-status">${Z.AI.isReady() ? '可用 · ' + Z.esc(Z.AI.label()) : '未就绪'}</span>
         </div>
-        <p class="set-hint" id="ai-hint">${ai.provider === 'local'
-          ? '首次加载需下载模型（约 480MB），之后缓存在本机，可离线使用。'
-          : ai.provider === 'online'
-            ? '在线知识库：不下载模型、不需要 Key，直接检索公开百科。'
-            : '浏览器直连需服务商允许跨域。'}</p>
+        <p class="set-hint" id="ai-hint">${ai.provider === 'agent'
+          ? '内置智能体：无需下载与 Key，联网即用。'
+          : ai.provider === 'local'
+            ? '首次加载需下载模型（约 480MB），之后缓存在本机，可离线使用。'
+            : ai.provider === 'online'
+              ? '在线知识库：不下载模型、不需要 Key，直接检索公开百科。'
+              : '浏览器直连需服务商允许跨域。'}</p>
       </section>
 
       <section class="set-card">
@@ -784,17 +823,21 @@
       const v = e.target.value;
       const isLocal = v === 'local';
       const isOnline = v === 'online';
+      const isAgent = v === 'agent';
       Z.$('#local-panel').hidden = !isLocal;
       Z.$('#online-panel').hidden = !isOnline;
-      Z.$('#api-fields').hidden = isLocal || isOnline;
+      Z.$('#agent-panel').hidden = !isAgent;
+      Z.$('#api-fields').hidden = isLocal || isOnline || isAgent;
       const hint = Z.$('#ai-hint');
-      if (hint) hint.textContent = isLocal
-        ? '首次加载需下载模型（约 480MB），之后缓存在本机，可离线使用。'
-        : isOnline
-          ? '在线知识库：不下载模型、不需要 Key，直接检索公开百科。'
-          : '浏览器直连需服务商允许跨域。';
+      if (hint) hint.textContent = isAgent
+        ? '内置智能体：无需下载与 Key，联网即用。'
+        : isLocal
+          ? '首次加载需下载模型（约 480MB），之后缓存在本机，可离线使用。'
+          : isOnline
+            ? '在线知识库：不下载模型、不需要 Key，直接检索公开百科。'
+            : '浏览器直连需服务商允许跨域。';
       const p = Z.AI.PRESETS[v];
-      if (p && !isLocal && !isOnline) {
+      if (p && !isLocal && !isOnline && !isAgent) {
         Z.$('#ai-base').value = p.baseUrl;
         Z.$('#ai-model').value = p.model;
       }
@@ -834,6 +877,8 @@
         patch.model = Z.$('#local-model')?.value || Z.AI.PRESETS.local.model;
       } else if (provider === 'online') {
         patch.model = Z.AI.PRESETS.online.model;
+      } else if (provider === 'agent') {
+        patch.model = Z.AI.PRESETS.agent.model;
       } else {
         patch.model = Z.$('#ai-model').value.trim();
         patch.baseUrl = Z.$('#ai-base').value.trim();
@@ -933,12 +978,12 @@
       if (link.getAttribute('href') === location.hash) route();
     });
 
-    // 一键下载离线 AI：侧栏与首页共用
+    // AI 助手：侧栏与首页共用
     document.addEventListener('click', (e) => {
       const dl = e.target.closest('[data-download-ai]');
       if (!dl) return;
       e.preventDefault();
-      downloadAI();
+      enableAI();
     });
 
     document.addEventListener('keydown', (e) => {
@@ -948,7 +993,7 @@
         if (!Z.$('#modal-root .modal')) { e.preventDefault(); openImport(); }
       }
       if (!typing && (e.key === 'a' || e.key === 'A')) {
-        if (!Z.$('#modal-root .modal')) { e.preventDefault(); downloadAI(); }
+        if (!Z.$('#modal-root .modal')) { e.preventDefault(); enableAI(); }
       }
       if (e.key === 'Escape') document.body.classList.remove('focus-mode');
     });
@@ -976,6 +1021,14 @@
 
   async function init() {
     applyTheme();
+    // 旧用户默认切到免下载的内置智能体；仍可在设置里改回
+    if (!Z.store.get('aiMigrated', false)) {
+      const cur = Z.store.get('ai', {});
+      if (!cur.provider || cur.provider === 'local' || cur.provider === 'online') {
+        Z.AI.save({ provider: 'agent', model: Z.AI.PRESETS.agent.model });
+      }
+      Z.store.set('aiMigrated', true);
+    }
     Z.hydrateIcons(document);
     bindGlobal();
     Z.LocalAI.subscribe(updateAiUI);
@@ -984,7 +1037,7 @@
     await route();
   }
 
-  Z.App = { init, refresh, route, openImport, downloadAI, get docs() { return docs; } };
+  Z.App = { init, refresh, route, openImport, enableAI, get docs() { return docs; } };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
