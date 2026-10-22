@@ -2,21 +2,55 @@
 (function (Z) {
   const memCache = new Map();
   const MAX_CACHE = 500;
+  let diskCache = null;
+  let flushTimer = null;
 
+  function disk() {
+    if (!diskCache) diskCache = Z.store.get('trCache', {});
+    return diskCache;
+  }
+  function scheduleFlush() {
+    if (flushTimer) return;
+    flushTimer = setTimeout(() => {
+      flushTimer = null;
+      if (!diskCache) return;
+      const keys = Object.keys(diskCache);
+      if (keys.length > MAX_CACHE) keys.slice(0, keys.length - MAX_CACHE).forEach((k) => delete diskCache[k]);
+      try { Z.store.set('trCache', diskCache); } catch (e) {}
+    }, 600);
+  }
   function cacheGet(key) {
     if (memCache.has(key)) return memCache.get(key);
-    const all = Z.store.get('trCache', {});
-    if (all[key]) { memCache.set(key, all[key]); return all[key]; }
+    const v = disk()[key];
+    if (v) { memCache.set(key, v); return v; }
     return null;
   }
   function cacheSet(key, val) {
     memCache.set(key, val);
     if (memCache.size > MAX_CACHE) memCache.delete(memCache.keys().next().value);
-    const all = Z.store.get('trCache', {});
-    all[key] = val;
-    const keys = Object.keys(all);
-    if (keys.length > MAX_CACHE) keys.slice(0, keys.length - MAX_CACHE).forEach((k) => delete all[k]);
-    Z.store.set('trCache', all);
+    disk()[key] = val;
+    scheduleFlush();
+  }
+
+  async function fetchT(url, opts = {}, ms = 5000) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), ms);
+    try {
+      return await fetch(url, Object.assign({}, opts, { signal: ctrl.signal }));
+    } finally { clearTimeout(timer); }
+  }
+
+  async function mapLimit(items, limit, fn) {
+    const out = new Array(items.length);
+    let cursor = 0;
+    async function worker() {
+      while (cursor < items.length) {
+        const i = cursor++;
+        try { out[i] = await fn(items[i], i); } catch (e) { out[i] = ''; }
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+    return out;
   }
 
   function targetFor(lang) {
@@ -40,7 +74,7 @@
 
   async function myMemory(text, pair) {
     const url = 'https://api.mymemory.translated.net/get?q=' + encodeURIComponent(text.slice(0, 480)) + '&langpair=' + encodeURIComponent(pair);
-    const res = await fetch(url);
+    const res = await fetchT(url, {}, 4500);
     if (!res.ok) throw new Error('翻译服务请求失败 (' + res.status + ')');
     const data = await res.json();
     if (data.quotaFinished) throw new Error('今日免费翻译额度已用完');
@@ -57,16 +91,15 @@
     const pair = pairFor(from, to);
     const sentences = Z.splitSentences(text);
     if (sentences.length > 1 && text.length > 420) {
-      const parts = [];
-      for (const s of sentences) {
-        parts.push(await myMemory(s, pair));
-        await Z.sleep(120);
-      }
-      const val = parts.join(' ');
-      cacheSet(key, val);
+      const parts = await mapLimit(sentences, 3, (s) => myMemory(s, pair));
+      const val = parts.filter(Boolean).join(' ');
+      if (val && from !== to && val.trim().toLowerCase() === text.trim().toLowerCase()) throw new Error('翻译无变化');
+      if (val) cacheSet(key, val);
       return val;
     }
     const val = await myMemory(text, pair);
+    // 接口把原文原样返回时视为失败，交给上层回退
+    if (from !== to && val.trim().toLowerCase() === text.trim().toLowerCase()) throw new Error('翻译无变化');
     cacheSet(key, val);
     return val;
   }
@@ -86,10 +119,12 @@
     });
     if (!pending.length) return out;
 
-    if (Z.AI.isChat()) {
+    // 批量翻译默认走免费接口（更快）；AI 仅用于显式 preferAI 的场景
+    const useAI = !!opts.preferAI && Z.AI.isChat();
+    if (useAI) {
       try {
         const chunks = [];
-        for (let k = 0; k < pending.length; k += 12) chunks.push(pending.slice(k, k + 12));
+        for (let k = 0; k < pending.length; k += 6) chunks.push(pending.slice(k, k + 6));
         for (const chunk of chunks) {
           const res = await Z.AI.translate(chunk.map((i) => texts[i]), from === 'zh' ? '中文' : from === 'ja' ? '日语' : '英语', to === 'zh' ? '中文' : '英语');
           res.forEach((t, k) => {
@@ -101,11 +136,11 @@
           if (opts.onProgress) opts.onProgress(chunk.map((i) => i));
         }
       } catch (e) {
-        Z.toast('AI 翻译失败，已切换免费翻译：' + e.message, 'error', 3800);
+        Z.toast('AI 翻译失败，已切换免费翻译：' + e.message, 'error', 3200);
       }
     }
 
-    // 免费翻译兜底（并发 2）
+    // 免费翻译兜底（并发 4，无额外等待）
     const rest = pending.filter((i) => !out[i]);
     let cursor = 0;
     async function worker() {
@@ -118,10 +153,27 @@
           out[idx] = '';
         }
         if (opts.onProgress) opts.onProgress([idx]);
-        await Z.sleep(80);
       }
     }
-    await Promise.all([worker(), worker()]);
+    await Promise.all(Array.from({ length: Math.min(4, rest.length) }, worker));
+    const failed = rest.filter((i) => !out[i]);
+    if (failed.length && failed.length === rest.length && Z.AI.isChat()) {
+      // 免费接口整体不可用时，退回 AI 翻译，保证仍能出结果
+      try {
+        const chunks = [];
+        for (let k = 0; k < failed.length; k += 6) chunks.push(failed.slice(k, k + 6));
+        for (const chunk of chunks) {
+          const res = await Z.AI.translate(chunk.map((i) => texts[i]), from === 'zh' ? '中文' : from === 'ja' ? '日语' : '英语', to === 'zh' ? '中文' : '英语');
+          res.forEach((t, k) => {
+            if (t) {
+              out[chunk[k]] = t;
+              cacheSet('ai:' + from + '>' + to + ':' + texts[chunk[k]], t);
+            }
+          });
+          if (opts.onProgress) opts.onProgress(chunk);
+        }
+      } catch (e) {}
+    }
     return out;
   }
 
@@ -131,36 +183,52 @@
   }
 
   async function lookupWord(word) {
-    const w = String(word || '').trim().replace(/[^A-Za-z'-]/g, '');
+    const w = String(word || '').trim().replace(/[^A-Za-z'\-\u4e00-\u9fff]/g, '');
     if (!w) return null;
     const key = 'word:' + w.toLowerCase();
-    const hit = Z.store.get('wordCache', {})[key];
-    if (hit) return hit;
+    const cacheAll = Z.store.get('wordCache', {});
+    const hit = cacheAll[key];
+    if (hit && (hit.cn || (hit.defs || []).length)) return hit;
 
-    const result = { word: w, phonetic: '', defs: [], cn: '', lang: Z.langOf(w) };
-    if (/^[A-Za-z][A-Za-z'-]*$/.test(w)) {
-      try {
-        const res = await fetch('https://api.dictionaryapi.dev/api/v2/entries/en/' + encodeURIComponent(w));
-        if (res.ok) {
-          const data = await res.json();
-          const entry = data[0] || {};
-          result.phonetic = (entry.phonetics || []).map((p) => p.text).find(Boolean) || entry.phonetic || '';
-          (entry.meanings || []).slice(0, 3).forEach((m) => {
-            (m.definitions || []).slice(0, 2).forEach((d) => {
-              result.defs.push({ pos: m.partOfSpeech, def: d.definition, example: d.example || '' });
-            });
-          });
-        }
-      } catch (e) {}
+    const isEn = /^[A-Za-z][A-Za-z'-]*$/.test(w);
+    const result = { word: w, phonetic: '', defs: [], cn: '', lang: isEn ? 'en' : 'zh' };
+    // 中文词语不做网络查询，直接朗读；避免无意义的等待
+    if (!isEn) return result;
+
+    const [dict, cn] = await Promise.allSettled([
+      (async () => {
+        const res = await fetchT('https://api.dictionaryapi.dev/api/v2/entries/en/' + encodeURIComponent(w), {}, 4200);
+        if (!res.ok) return null;
+        return res.json();
+      })(),
+      // 免费词典与智能体同时起跑，谁先给出中文释义用谁
+      Promise.any([
+        freeTranslate(w, 'en', 'zh'),
+        (async () => {
+          if (!Z.AI.isChat()) throw new Error('no ai');
+          const arr = await Z.AI.translate([w], '英语', '中文');
+          if (!arr || !arr[0]) throw new Error('empty');
+          return arr[0];
+        })()
+      ])
+    ]);
+    if (dict.status === 'fulfilled' && Array.isArray(dict.value)) {
+      const entry = dict.value[0] || {};
+      result.phonetic = (entry.phonetics || []).map((p) => p.text).find(Boolean) || entry.phonetic || '';
+      (entry.meanings || []).slice(0, 3).forEach((m) => {
+        (m.definitions || []).slice(0, 2).forEach((d) => {
+          result.defs.push({ pos: m.partOfSpeech, def: d.definition, example: d.example || '' });
+        });
+      });
     }
-    try {
-      result.cn = await freeTranslate(w, result.lang === 'zh' ? 'zh' : 'en', 'zh');
-    } catch (e) {}
-    const cache = Z.store.get('wordCache', {});
-    cache[key] = result;
-    const keys = Object.keys(cache);
-    if (keys.length > 300) keys.slice(0, keys.length - 300).forEach((k) => delete cache[k]);
-    Z.store.set('wordCache', cache);
+    if (cn.status === 'fulfilled' && cn.value) result.cn = cn.value;
+    // 只缓存有内容的查询，避免把失败结果永久缓存
+    if (result.cn || result.defs.length) {
+      cacheAll[key] = result;
+      const keys = Object.keys(cacheAll);
+      if (keys.length > 300) keys.slice(0, keys.length - 300).forEach((k) => delete cacheAll[k]);
+      Z.store.set('wordCache', cacheAll);
+    }
     return result;
   }
 

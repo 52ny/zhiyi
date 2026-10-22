@@ -384,7 +384,19 @@
   }
 
   /* ================= 资料页 ================= */
+  function fixDocLang(doc) {
+    if (!doc || !doc.blocks || !doc.blocks.length) return doc;
+    if (doc.lang && doc.lang !== 'zh') return doc;
+    const t = doc.blocks.map((b) => b.text || '').join(' ');
+    if (!/[\u4e00-\u9fff]/.test(t) && /[A-Za-z]{12,}/.test(t)) {
+      doc.lang = Z.langOf(t) || 'en';
+      Z.DB.putDoc(doc);
+    }
+    return doc;
+  }
+
   function renderDoc(view, doc, routeInfo) {
+    fixDocLang(doc);
     currentDocId = doc.id;
     doc.lastOpenedAt = Date.now();
     const queryTab = routeInfo.query.get('tab');

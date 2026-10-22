@@ -16,7 +16,7 @@
       title: '未命名资料',
       type: 'text',
       source: 'txt',
-      lang: 'zh',
+      lang: null,
       blocks: [],
       translations: {},
       highlights: [],
@@ -220,7 +220,7 @@
   function finishDoc(doc, opts = {}) {
     doc.blocks = doc.blocks.filter((b) => b && b.text && b.text.trim());
     const text = doc.blocks.map((b) => b.text).join('\n');
-    doc.lang = doc.lang || Z.langOf(text);
+    doc.lang = doc.lang || Z.langOf(text) || 'zh';
     doc.type = opts.forceType || detectType(doc.blocks, doc.lang);
     doc.meta = Object.assign(doc.meta || {}, {
       words: (text.match(/[A-Za-z]+|[\u4e00-\u9fff]/g) || []).length,

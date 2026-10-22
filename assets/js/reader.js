@@ -485,11 +485,11 @@
     try {
       result = await Z.Translate.lookupWord(word);
     } catch (e) {}
-
     const resEl = Z.$('#word-result', pop);
+    Z.$('.word-loading', pop)?.remove();
     if (!resEl) return;
-    if (!result) {
-      resEl.innerHTML = '<p class="muted small">未查到释义，可直接朗读或用 AI 翻译整段。</p>';
+    if (!result || (!result.cn && !(result.defs || []).length)) {
+      resEl.innerHTML = `<p class="muted small">${result && result.lang === 'zh' ? '中文词语：可直接点朗读，释义结合上下文理解。' : '暂未取到释义，可点朗读，或检查网络后重试。'}</p>`;
     } else {
       resEl.innerHTML = `
         ${result.phonetic ? `<div class="word-phon">${Z.esc(result.phonetic)}</div>` : ''}
@@ -563,31 +563,57 @@
     ctx.translating = true;
     const btn = Z.$('[data-act="bilingual"]', ctx.container);
     const old = btn?.innerHTML;
-    if (btn) btn.innerHTML = '<span class="spinner small"></span>翻译中';
-    try {
-      const texts = idxs.map((i) => doc.blocks[i].text);
+    const total = idxs.length;
+    let done = 0;
+
+    const paint = (i, text) => {
+      const el = Z.$(`.trans[data-trans="${i}"]`, ctx.container);
+      if (!el) return;
+      el.textContent = text;
+      el.hidden = !ctx.bilingual;
+    };
+    const runBatch = async (list) => {
+      const texts = list.map((i) => doc.blocks[i].text);
       const res = await Z.Translate.translateBlocks(texts, { fromLang: doc.lang });
-      let count = 0;
-      idxs.forEach((i, k) => {
-        const t = res[k];
-        if (!t) return;
-        doc.translations[i] = t;
-        count++;
-        const el = Z.$(`.trans[data-trans="${i}"]`, ctx.container);
-        if (el) {
-          el.textContent = t;
-          el.hidden = !ctx.bilingual;
-        }
+      list.forEach((i, k) => {
+        if (res[k]) { doc.translations[i] = res[k]; paint(i, res[k]); }
+        done++;
       });
       ctx.save(doc);
-      Z.toast(count ? `已翻译 ${count} 段` : '翻译失败，请检查网络或配置 AI', count ? 'ok' : 'error');
+      if (btn) btn.innerHTML = `<span class="spinner small"></span>翻译 ${done}/${total}`;
+    };
+
+    try {
+      // 先翻当前最可能被看到的前几段，用户不必等全文
+      const first = idxs.slice(0, 6);
+      if (btn) btn.innerHTML = '<span class="spinner small"></span>翻译中';
+      first.forEach((i) => paint(i, '翻译中…'));
+      await runBatch(first);
+      if (btn) { btn.innerHTML = old; Z.hydrateIcons(btn); btn.classList.toggle('on', ctx.bilingual); }
+
+      // 其余在后台补齐，不阻塞阅读
+      const rest = idxs.slice(6);
+      if (rest.length) {
+        (async () => {
+          try {
+            for (let k = 0; k < rest.length; k += 8) await runBatch(rest.slice(k, k + 8));
+            if (done) Z.toast(`已翻译 ${done} 段`, 'ok');
+          } catch (e) {
+            Z.toast('部分段落翻译失败：' + e.message, 'error', 3200);
+          } finally {
+            ctx.translating = false;
+            if (btn) { btn.innerHTML = old; Z.hydrateIcons(btn); btn.classList.toggle('on', ctx.bilingual); }
+          }
+        })();
+        return;
+      }
+      ctx.translating = false;
+      if (done) Z.toast(`已翻译 ${done} 段`, 'ok');
     } catch (e) {
       Z.toast('翻译失败：' + e.message, 'error');
-    } finally {
       ctx.translating = false;
-      if (btn && old) btn.innerHTML = old;
-      if (btn) btn.classList.toggle('on', ctx.bilingual);
-      Z.hydrateIcons(btn);
+    } finally {
+      if (!idxs.slice(6).length && btn) { btn.innerHTML = old; Z.hydrateIcons(btn); }
     }
   }
 
