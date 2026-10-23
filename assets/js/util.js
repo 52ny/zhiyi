@@ -250,12 +250,15 @@ window.ZY = window.ZY || {};
   Z.isClassical = function (text) {
     const s = String(text || '');
     const cjk = (s.match(/[\u4e00-\u9fff]/g) || []).length;
-    if (cjk < 40) return false;
+    if (cjk < 20) return false;
     const marks = (s.match(/[之乎者也矣焉哉曰吾汝尔其乃遂盖夫兮耶邪矣莫弗]/g) || []).length;
     const modern = (s.match(/[的地得了着们这那很吗呢吧啊]/g) || []).length;
     const density = marks / Math.max(1, cjk);
-    if (modern / Math.max(1, cjk) > 0.06) return false;
-    return marks >= 4 && density > 0.045;
+    if (marks < 2 || density < 0.03) return false;
+    if (modern / Math.max(1, cjk) > 0.05) return false;
+    // 命中教材常见文言标志时放宽
+    if (/子曰|论语|孟子|庄子|史记|之乎者也|焉|矣|曰[:：]/.test(s)) return true;
+    return true;
   };
 
   Z.splitSentences = function (text) {

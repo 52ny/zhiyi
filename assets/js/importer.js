@@ -183,6 +183,36 @@
     return finishDoc(next);
   }
 
+  /** 常见典籍固定表述的 OCR 纠错（只处理高置信的形近误识） */
+  function fixClassicOcr(text) {
+    let s = String(text || '');
+    // OCR 常把每个汉字用空格隔开，先合并再匹配
+    s = s.replace(/([\u4e00-\u9fff])\s+(?=[\u4e00-\u9fff])/g, '$1')
+      .replace(/\s+([，。；：！？、])/g, '$1')
+      .replace(/([，。；：！？、])\s+/g, '$1');
+    const rules = [
+      [/([备雷需雪霸])武伯/g, '孟武伯'],
+      [/(村|材|付|树)夏(?=问孝)/g, '子夏'],
+      [/葬之以礼\s*[，,]\s*葬之以礼/g, '葬之以礼，祭之以礼'],
+      [/[芋芧芉]之以礼/g, '葬之以礼'],
+      [/子[日下巳己](?=\s*[:：])/g, '子曰'],
+      [/(?:FH|TH|7H|Q\.?FH)(?=\s*[:：])/g, '子曰'],
+      [/君子不船/g, '君子不器'],
+      [/不船(?=[。.])/g, '不器'],
+      [/则浆/g, '则罔'],
+      [/则殉/g, '则殆'],
+      [/看子周而不比/g, '君子周而不比'],
+      [/人[起其][记讫]哉/g, '人焉廋哉'],
+      [/可以为师疾/g, '可以为师矣'],
+      [/回也不蚌/g, '回也不愚'],
+      [/妹之以礼/g, '葬之以礼'],
+      [/人先生伺/g, '先生馔'],
+      [/属与回言/g, '吾与回言']
+    ];
+    rules.forEach(([re, to]) => { s = s.replace(re, to); });
+    return s;
+  }
+
   /** OCR 错字校正：只改识别错误，不改写内容 */
   async function aiFixOcr(text) {
     if (!Z.AI.isChat()) throw new Error('需要内置智能体或云端 AI');
@@ -199,9 +229,9 @@
     const out = [];
     for (const chunk of chunks) {
       const r = await Z.AI.chat([
-        { role: 'system', content: '你是 OCR 校对员。只修正识别错误的字词、漏字与断行，保留原段落与标点；不改写、不增删内容；不确定时保留原样。只输出修正后的文本，不要解释。' },
-        { role: 'user', content: chunk }
-      ], { temperature: 0, maxTokens: 2200 });
+        { role: 'system', content: '你是 OCR 校对员，擅长中文古籍与教材。只修正识别错误，不改写、不增删条目，保留编号与换行。\n示例：\n输入：6.备武伯问孝。FH：“父母唯其疾之忧。”\n输出：6.孟武伯问孝。子曰：“父母唯其疾之忧。”\n输入：8.村夏问孝。子日：“色难。”\n输出：8.子夏问孝。子曰：“色难。”\n输入：15.子日：“学而不思则浆，思而不学则殉。”\n输出：15.子曰：“学而不思则罔，思而不学则殆。”\n常见典籍固定表述必须按原文纠正；不确定的字保留原样。' },
+        { role: 'user', content: '请逐行校对，输出与输入条目数、行数完全一致，不要删除任何一条：\n' + chunk }
+      ], { temperature: 0, maxTokens: 2400 });
       out.push(String(r || '').trim());
     }
     return out.join('\n\n');
@@ -302,9 +332,9 @@
     const w0 = source.naturalWidth || source.width;
     const h0 = source.naturalHeight || source.height;
     if (!w0 || !h0) return source;
-    const scale = Math.min(3.2, Math.max(1, 1600 / w0, w0 < 900 ? 1600 / w0 : 1));
+    const scale = Math.min(3.2, Math.max(1, 1800 / w0, w0 < 900 ? 1800 / w0 : 1));
     const c = document.createElement('canvas');
-    c.width = Math.min(3000, Math.round(w0 * scale));
+    c.width = Math.min(3200, Math.round(w0 * scale));
     c.height = Math.round(h0 * (c.width / w0));
     const g = c.getContext('2d', { willReadFrequently: true });
     g.imageSmoothingEnabled = true;
@@ -329,8 +359,35 @@
         d[i] = d[i + 1] = d[i + 2] = v;
       }
       g.putImageData(img, 0, 0);
+      // 轻度锐化，改善拍照/截图的小字边缘
+      const w = c.width, h = c.height;
+      const src = new Uint8ClampedArray(g.getImageData(0, 0, w, h).data);
+      const out = g.createImageData(w, h);
+      const od = out.data;
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const k = (y * w + x) * 4;
+          let v = src[k];
+          if (x > 0 && y > 0 && x < w - 1 && y < h - 1) {
+            const up = src[k - w * 4], dn = src[k + w * 4], lf = src[k - 4], rt = src[k + 4];
+            v = 5 * src[k] - up - dn - lf - rt;
+          }
+          v = v < 0 ? 0 : v > 255 ? 255 : v;
+          od[k] = od[k + 1] = od[k + 2] = v;
+          od[k + 3] = 255;
+        }
+      }
+      g.putImageData(out, 0, 0);
     } catch (e) {}
     return c;
+  }
+
+  function ocrScore(r) {
+    const t = r.text || '';
+    const cjk = (t.match(/[\u4e00-\u9fff]/g) || []).length;
+    const latin = (t.match(/[A-Za-z]{2,}/g) || []).length;
+    const heavy = cjk > latin * 3;
+    return cjk * (0.4 + (r.confidence || 0) / 100) - (heavy ? latin * 3 : 0);
   }
 
   async function ocrImage(source, onProgress, psm) {
@@ -381,13 +438,13 @@
       let best = await ocrImage(enhanced, (m) => {
         if (m.status === 'recognizing text') ctx.progress(20 + Math.round(m.progress * 70), '识别文字 ' + Math.round(m.progress * 100) + '%');
       }, 3);
-      // 置信度偏低时换版面模式再识别一次，取更可信的结果
-      if (best.confidence < 72 || best.text.replace(/\s/g, '').length < 12) {
-        ctx.progress(90, '置信度偏低，换版面模式复识别…');
+      // 置信度偏低或出现明显英文乱码时，换版面模式再识别一次
+      const noisy = (best.text.match(/[A-Z]{2,}|[A-Za-z]\.[A-Za-z]/g) || []).length > 3;
+      if (best.confidence < 85 || noisy) {
+        ctx.progress(90, noisy ? '检测到乱码，换版面模式复识别…' : '置信度偏低，换版面模式复识别…');
         const second = await ocrImage(enhanced, null, 6).catch(() => null);
         if (second) {
-          const score = (x) => x.text.replace(/\s/g, '').length * (0.4 + (x.confidence || 0) / 100);
-          if (score(second) > score(best)) best = second;
+          if (ocrScore(second) > ocrScore(best)) best = second;
         }
       }
       text = best.text;
@@ -666,6 +723,13 @@
         const doc = await fromFile(file, ctx);
         if (b.cancelled) { b.close(); continue; }
         doc.blocks = cleanBlocks(doc.blocks, opts.wanted);
+        if (doc.meta && doc.meta.ocr) {
+          const joined = doc.blocks.map((x) => x.text || '').join(' ');
+          if (doc.lang === 'wenyan' || (Z.isClassical && Z.isClassical(joined))) {
+            doc.blocks.forEach((blk) => { blk.text = fixClassicOcr(blk.text); });
+            doc.lang = 'wenyan';
+          }
+        }
         doc.meta = Object.assign(doc.meta || {}, { wanted: opts.wanted || '' });
         finishDoc(doc);
         docs.push(doc);
@@ -698,6 +762,6 @@
   Z.Import = {
     handleFiles, extractFiles, saveDocs, fromFile, fromPlain, fromMarkdown, fromHtml, fromImage, fromPdf,
     makeDoc, finishDoc, detectType, loadImage, ocrImage, getOcrWorker, coverFromImage, enhanceForOcr,
-    cleanBlocks, blocksFromPlainText, fromEdited, aiRefine, aiFixOcr, intentOf
+    cleanBlocks, blocksFromPlainText, fromEdited, aiRefine, aiFixOcr, fixClassicOcr, intentOf
   };
 })(window.ZY);

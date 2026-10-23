@@ -79,24 +79,25 @@
     const c = cfg();
     const llm7Model = !c.model || c.model === 'openai' || c.model === 'gpt-oss:20b' ? 'gpt-oss:20b' : c.model;
     const endpoints = [
-      { url: 'https://api.llm7.io/v1/chat/completions', model: llm7Model },
-      { url: 'https://text.pollinations.ai/openai', model: 'openai' }
+      { url: 'https://api.llm7.io/v1/chat/completions', model: llm7Model, extra: {} },
+      { url: 'https://api.llm7.io/v1/chat/completions', model: llm7Model, extra: {}, retry: true },
+      { url: 'https://text.pollinations.ai/openai', model: 'openai', extra: { reasoning_effort: 'low' } }
     ];
     const errors = [];
     for (const ep of endpoints) {
+      if (ep.retry) await new Promise((r) => setTimeout(r, 2500));
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), opts.timeout || 45000);
+      const timer = setTimeout(() => controller.abort(), opts.timeout || 60000);
       try {
         const res = await fetch(ep.url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+          body: JSON.stringify(Object.assign({
             model: ep.model,
             messages,
             temperature: opts.temperature == null ? 0.5 : opts.temperature,
-            max_tokens: opts.maxTokens || 2000,
-            reasoning_effort: 'low'
-          }),
+            max_tokens: opts.maxTokens || 2000
+          }, ep.extra)),
           signal: controller.signal
         });
         if (!res.ok) throw new Error('HTTP ' + res.status);

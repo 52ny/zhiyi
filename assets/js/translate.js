@@ -128,8 +128,10 @@
     if (classical) {
       if (!Z.AI.isChat()) throw new Error('文言文翻译需要内置智能体或云端 AI');
       const chunks = [];
-      for (let k = 0; k < pending.length; k += 4) chunks.push(pending.slice(k, k + 4));
-      for (const chunk of chunks) {
+      for (let k = 0; k < pending.length; k += 5) chunks.push(pending.slice(k, k + 5));
+      for (let ci = 0; ci < chunks.length; ci++) {
+        const chunk = chunks[ci];
+        if (ci > 0) await Z.sleep(700);
         const payload = chunk.map((i) => `[${i}] ${texts[i]}`).join('\n');
         const raw = await Z.AI.chat([
           { role: 'system', content: '你是文言文翻译专家。必须把文言文改写成白话文（现代汉语），严禁照抄原文；逐段输出，格式为「[编号] 白话译文」，不要解释。' },

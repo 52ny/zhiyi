@@ -387,8 +387,13 @@
   /* ================= 资料页 ================= */
   function fixDocLang(doc) {
     if (!doc || !doc.blocks || !doc.blocks.length) return doc;
-    if (doc.lang && doc.lang !== 'zh') return doc;
     const t = doc.blocks.map((b) => b.text || '').join(' ');
+    if (doc.lang === 'zh' && Z.isClassical && Z.isClassical(t)) {
+      doc.lang = 'wenyan';
+      Z.DB.putDoc(doc);
+      return doc;
+    }
+    if (doc.lang && doc.lang !== 'zh') return doc;
     if (!/[\u4e00-\u9fff]/.test(t) && /[A-Za-z]{12,}/.test(t)) {
       doc.lang = Z.langOf(t) || 'en';
       Z.DB.putDoc(doc);
@@ -635,8 +640,9 @@
         <textarea class="input area" id="pv-text" rows="15">${Z.esc(toText(doc))}</textarea>
         <div class="paste-foot">
           ${Z.AI.isChat() ? '<button class="btn ghost small" id="pv-fix"><span data-ico="sparkle"></span>AI 校正错字</button>' : ''}
+          <button class="btn ghost small" id="pv-undo" hidden>撤销校正</button>
           ${Z.AI.isChat() ? '<button class="btn ghost small" id="pv-ai"><span data-ico="sparkle"></span>按描述重新整理</button>' : ''}
-          <span class="muted small">空行分段，## 表示标题</span>
+          <span class="muted small" id="pv-status"></span>
           <button class="btn ghost" id="pv-cancel">取消</button>
           <button class="btn primary" id="pv-ok">确认导入</button>
         </div>
@@ -645,16 +651,38 @@
     });
     Z.hydrateIcons(m.root);
     Z.$('#pv-cancel', m.root).addEventListener('click', () => m.close());
-    Z.$('#pv-fix', m.root)?.addEventListener('click', async () => {
-      const busy = Z.busy('正在校正识别错误…', '只修错字，不改写内容');
+
+    let originalText = null;
+    const status = (t) => { const el = Z.$('#pv-status', m.root); if (el) el.textContent = t || ''; };
+    const runFix = async (silent) => {
+      const btn = Z.$('#pv-fix', m.root);
+      if (btn && btn.disabled) return;
+      if (btn) btn.disabled = true;
+      status('AI 校正中…');
       try {
-        const fixed = await Z.Import.aiFixOcr(Z.$('#pv-text', m.root).value);
+        const src = Z.$('#pv-text', m.root).value;
+        const fixed = await Z.Import.aiFixOcr(src);
+        if (!m.root.isConnected) return;
+        if (!originalText) originalText = src;
         Z.$('#pv-text', m.root).value = fixed;
-        Z.toast('已校正，请再核对一遍', 'ok');
+        Z.$('#pv-undo', m.root).hidden = false;
+        status('已校正，请核对');
+        if (!silent) Z.toast('已校正，请再核对一遍', 'ok');
       } catch (e) {
-        Z.toast(e.message, 'error', 4000);
-      } finally { busy.close(); }
+        status('校正失败：' + e.message);
+        if (!silent) Z.toast(e.message, 'error', 4000);
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    };
+    Z.$('#pv-fix', m.root)?.addEventListener('click', () => runFix(false));
+    Z.$('#pv-undo', m.root)?.addEventListener('click', () => {
+      if (originalText == null) return;
+      Z.$('#pv-text', m.root).value = originalText;
+      Z.$('#pv-undo', m.root).hidden = true;
+      status('已撤销校正');
     });
+    if (conf && conf < 85 && Z.AI.isChat()) setTimeout(() => runFix(true), 350);
     Z.$('#pv-ai', m.root)?.addEventListener('click', async () => {
       const busy = Z.busy('正在按描述整理…', wanted || '整理成通顺正文');
       try {
