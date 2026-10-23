@@ -246,6 +246,18 @@ window.ZY = window.ZY || {};
     return 'en';
   };
 
+  /** 文言文粗判：虚词密度高、现代助词少 */
+  Z.isClassical = function (text) {
+    const s = String(text || '');
+    const cjk = (s.match(/[\u4e00-\u9fff]/g) || []).length;
+    if (cjk < 40) return false;
+    const marks = (s.match(/[之乎者也矣焉哉曰吾汝尔其乃遂盖夫兮耶邪矣莫弗]/g) || []).length;
+    const modern = (s.match(/[的地得了着们这那很吗呢吧啊]/g) || []).length;
+    const density = marks / Math.max(1, cjk);
+    if (modern / Math.max(1, cjk) > 0.06) return false;
+    return marks >= 4 && density > 0.045;
+  };
+
   Z.splitSentences = function (text) {
     const s = String(text || '').replace(/\s+/g, ' ').trim();
     if (!s) return [];

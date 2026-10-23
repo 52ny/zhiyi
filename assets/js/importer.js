@@ -34,6 +34,8 @@
     return String(s || '')
       .replace(/\u00a0/g, ' ')
       .replace(/[ \t]+/g, ' ')
+      // OCR 常在汉字之间插入空格，这里合并；保留中英文之间的空格
+      .replace(/([\u4e00-\u9fff，。；：！？、）】》])\s+(?=[\u4e00-\u9fff，。；：！？、（【《])/g, '$1')
       .replace(/\s+([，。；：！？、])/g, '$1')
       .trim();
   }
@@ -181,6 +183,30 @@
     return finishDoc(next);
   }
 
+  /** OCR 错字校正：只改识别错误，不改写内容 */
+  async function aiFixOcr(text) {
+    if (!Z.AI.isChat()) throw new Error('需要内置智能体或云端 AI');
+    const src = String(text || '');
+    if (!src.trim()) return src;
+    const paras = src.split(/\n{2,}/);
+    const chunks = [];
+    let buf = '';
+    paras.forEach((p) => {
+      if (buf && buf.length + p.length > 1200) { chunks.push(buf); buf = p; }
+      else buf += (buf ? '\n\n' : '') + p;
+    });
+    if (buf) chunks.push(buf);
+    const out = [];
+    for (const chunk of chunks) {
+      const r = await Z.AI.chat([
+        { role: 'system', content: '你是 OCR 校对员。只修正识别错误的字词、漏字与断行，保留原段落与标点；不改写、不增删内容；不确定时保留原样。只输出修正后的文本，不要解释。' },
+        { role: 'user', content: chunk }
+      ], { temperature: 0, maxTokens: 2200 });
+      out.push(String(r || '').trim());
+    }
+    return out.join('\n\n');
+  }
+
   /** 用 AI 按用户描述重组（需本地模型或云端接口） */
   async function aiRefine(doc, wanted) {
     if (!Z.AI || !Z.AI.isChat || !Z.AI.isChat()) throw new Error('需要本地模型或云端接口');
@@ -221,6 +247,7 @@
     doc.blocks = doc.blocks.filter((b) => b && b.text && b.text.trim());
     const text = doc.blocks.map((b) => b.text).join('\n');
     doc.lang = doc.lang || Z.langOf(text) || 'zh';
+    if (doc.lang === 'zh' && Z.isClassical && Z.isClassical(text)) doc.lang = 'wenyan';
     doc.type = opts.forceType || detectType(doc.blocks, doc.lang);
     doc.meta = Object.assign(doc.meta || {}, {
       words: (text.match(/[A-Za-z]+|[\u4e00-\u9fff]/g) || []).length,
@@ -261,7 +288,12 @@
       }
     };
     ocrWorker = await T.createWorker('chi_sim+eng', 1, options);
-    try { await ocrWorker.setParameters({ preserve_interword_spaces: '1' }); } catch (e) {}
+    try {
+      await ocrWorker.setParameters({
+        preserve_interword_spaces: '0',
+        user_defined_dpi: '300'
+      });
+    } catch (e) {}
     return ocrWorker;
   }
 
@@ -270,7 +302,7 @@
     const w0 = source.naturalWidth || source.width;
     const h0 = source.naturalHeight || source.height;
     if (!w0 || !h0) return source;
-    const scale = Math.min(3, Math.max(1, 1400 / w0, w0 < 900 ? 1400 / w0 : 1));
+    const scale = Math.min(3.2, Math.max(1, 1600 / w0, w0 < 900 ? 1600 / w0 : 1));
     const c = document.createElement('canvas');
     c.width = Math.min(3000, Math.round(w0 * scale));
     c.height = Math.round(h0 * (c.width / w0));
@@ -301,8 +333,11 @@
     return c;
   }
 
-  async function ocrImage(source, onProgress) {
+  async function ocrImage(source, onProgress, psm) {
     const worker = await getOcrWorker(onProgress);
+    if (psm != null) {
+      try { await worker.setParameters({ tessedit_pageseg_mode: String(psm) }); } catch (e) {}
+    }
     const res = await worker.recognize(source, {}, { text: true, blocks: false });
     return {
       text: (res.data?.text || '').replace(/\r/g, ''),
@@ -343,11 +378,20 @@
     let conf = 0;
     try {
       const enhanced = enhanceForOcr(img);
-      const r = await ocrImage(enhanced, (m) => {
+      let best = await ocrImage(enhanced, (m) => {
         if (m.status === 'recognizing text') ctx.progress(20 + Math.round(m.progress * 70), '识别文字 ' + Math.round(m.progress * 100) + '%');
-      });
-      text = r.text;
-      conf = r.confidence;
+      }, 3);
+      // 置信度偏低时换版面模式再识别一次，取更可信的结果
+      if (best.confidence < 72 || best.text.replace(/\s/g, '').length < 12) {
+        ctx.progress(90, '置信度偏低，换版面模式复识别…');
+        const second = await ocrImage(enhanced, null, 6).catch(() => null);
+        if (second) {
+          const score = (x) => x.text.replace(/\s/g, '').length * (0.4 + (x.confidence || 0) / 100);
+          if (score(second) > score(best)) best = second;
+        }
+      }
+      text = best.text;
+      conf = best.confidence;
     } catch (e) {
       text = '';
     }
@@ -452,7 +496,7 @@
           const canvas = await renderPdfPage(pdf, n, 2);
           const r = await ocrImage(enhanceForOcr(canvas), (m) => {
             if (m.status === 'recognizing text') ctx.progress(72 + Math.round(((n - 1 + m.progress) / limit) * 26), `OCR ${n}/${limit} 页 · ${Math.round(m.progress * 100)}%`);
-          });
+          }, 3);
           const lines = r.text.split(/\n+/).map((s) => cleanInline(s)).filter(Boolean);
           doc.blocks = doc.blocks.concat(blocksFromLines(lines, n));
         } catch (e) {
@@ -654,6 +698,6 @@
   Z.Import = {
     handleFiles, extractFiles, saveDocs, fromFile, fromPlain, fromMarkdown, fromHtml, fromImage, fromPdf,
     makeDoc, finishDoc, detectType, loadImage, ocrImage, getOcrWorker, coverFromImage, enhanceForOcr,
-    cleanBlocks, blocksFromPlainText, fromEdited, aiRefine, intentOf
+    cleanBlocks, blocksFromPlainText, fromEdited, aiRefine, aiFixOcr, intentOf
   };
 })(window.ZY);

@@ -244,6 +244,7 @@
     }
     if (r.name === 'review') { navTo('review'); renderReview(view); return; }
     if (r.name === 'lab') { navTo('lab'); setCrumb('<span>知识工坊</span>'); setTopActions(''); Z.Lab.mount(view); return; }
+    if (r.name === 'chat') { navTo('chat'); setCrumb('<span>问 AI</span>'); setTopActions(''); Z.ChatPage.mount(view, docs); return; }
     if (r.name === 'settings') { navTo('settings'); setCrumb('<span>设置</span>'); setTopActions(''); renderSettings(view); return; }
     navTo('home');
     renderHome(view);
@@ -364,7 +365,7 @@
     const mastered = cards.filter((c) => (c.interval || 0) >= 21).length;
     const pct = cards.length ? Math.round(mastered / cards.length * 100) : 0;
     const typeName = d.type === 'knowledge' ? '知识型' : '课文型';
-    const lang = d.lang === 'zh' ? '中文' : d.lang === 'en' ? '英文' : d.lang === 'ja' ? '日文' : d.lang || '';
+    const lang = d.lang === 'zh' ? '中文' : d.lang === 'en' ? '英文' : d.lang === 'ja' ? '日文' : d.lang === 'wenyan' ? '文言文' : d.lang || '';
     return `<article class="doc-card fade-up" style="animation-delay:${Math.min(i * 40, 320)}ms" data-doc="${d.id}" tabindex="0">
       <div class="doc-cover ${d.cover ? 'has-img' : ''}" ${d.cover ? `style="background-image:url('${d.cover}')"` : ''}>
         ${d.cover ? '' : `<span class="cover-glyph">${Z.esc((d.title || '知')[0])}</span>`}
@@ -407,7 +408,7 @@
     setCrumb(`<a href="#/home">文库</a><span class="crumb-sep">/</span><span>${Z.esc(Z.truncate(doc.title, 24))}</span>`);
     setTopActions(`<button class="btn ghost small" id="doc-export">${Z.icon('download')}导出</button><button class="btn ghost small" id="doc-delete">${Z.icon('trash')}</button>`);
 
-    const langLabel = doc.lang === 'zh' ? '中文' : doc.lang === 'en' ? '英文' : '外文';
+    const langLabel = doc.lang === 'zh' ? '中文' : doc.lang === 'en' ? '英文' : doc.lang === 'wenyan' ? '文言文' : '外文';
     view.innerHTML = `<div class="doc-page">
       <header class="doc-head">
         <a class="back-link" href="#/home">${Z.icon('back')}文库</a>
@@ -428,7 +429,7 @@
           </label>
         </div>
       </header>
-      ${doc.lang !== 'zh' && !Object.keys(doc.translations || {}).length ? `<div class="hint-banner" id="lang-hint">${Z.icon('translate')}<span>外文资料：开启双语，点词可朗读查义。</span><button class="btn ghost small" id="hint-bilingual">开启双语</button><button class="ghost-icon tiny" id="hint-close">${Z.icon('close')}</button></div>` : ''}
+      ${doc.lang !== 'zh' && !Object.keys(doc.translations || {}).length ? `<div class="hint-banner" id="lang-hint">${Z.icon('translate')}<span>${doc.lang === 'wenyan' ? '检测到文言文：开启「双语」可逐段译为白话文。' : '外文资料：开启双语，点词可朗读查义。'}</span><button class="btn ghost small" id="hint-bilingual">开启双语</button><button class="ghost-icon tiny" id="hint-close">${Z.icon('close')}</button></div>` : ''}
       <nav class="doc-tabs">
         ${tabBtn('reader', 'book', '阅读')}
         ${tabBtn('mindmap', 'mindmap', '思维导图')}
@@ -629,10 +630,11 @@
       body: `<div class="preview">
         <div class="preview-meta">
           <input class="input" id="pv-title" value="${Z.esc(doc.title)}" placeholder="标题">
-          <span class="muted small">${doc.blocks.length} 段${conf ? ' · OCR 置信度 ' + conf + '%' : ''}${wanted ? ' · 要求：' + Z.esc(wanted) : ''}</span>
+          <span class="muted small">${doc.blocks.length} 段${conf ? ' · OCR 置信度 ' + conf + '%' + (conf < 85 ? '（偏低，建议校正）' : '') : ''}${wanted ? ' · 要求：' + Z.esc(wanted) : ''}</span>
         </div>
         <textarea class="input area" id="pv-text" rows="15">${Z.esc(toText(doc))}</textarea>
         <div class="paste-foot">
+          ${Z.AI.isChat() ? '<button class="btn ghost small" id="pv-fix"><span data-ico="sparkle"></span>AI 校正错字</button>' : ''}
           ${Z.AI.isChat() ? '<button class="btn ghost small" id="pv-ai"><span data-ico="sparkle"></span>按描述重新整理</button>' : ''}
           <span class="muted small">空行分段，## 表示标题</span>
           <button class="btn ghost" id="pv-cancel">取消</button>
@@ -643,6 +645,16 @@
     });
     Z.hydrateIcons(m.root);
     Z.$('#pv-cancel', m.root).addEventListener('click', () => m.close());
+    Z.$('#pv-fix', m.root)?.addEventListener('click', async () => {
+      const busy = Z.busy('正在校正识别错误…', '只修错字，不改写内容');
+      try {
+        const fixed = await Z.Import.aiFixOcr(Z.$('#pv-text', m.root).value);
+        Z.$('#pv-text', m.root).value = fixed;
+        Z.toast('已校正，请再核对一遍', 'ok');
+      } catch (e) {
+        Z.toast(e.message, 'error', 4000);
+      } finally { busy.close(); }
+    });
     Z.$('#pv-ai', m.root)?.addEventListener('click', async () => {
       const busy = Z.busy('正在按描述整理…', wanted || '整理成通顺正文');
       try {
@@ -794,6 +806,7 @@
           <label>翻译方向
             <select id="tr-target">
               <option value="auto" ${target === 'auto' ? 'selected' : ''}>自动（外文→中文，中文→英文）</option>
+              <option value="wenyan" ${target === 'wenyan' ? 'selected' : ''}>文言文 → 白话文</option>
               <option value="zh" ${target === 'zh' ? 'selected' : ''}>始终译为中文</option>
               <option value="en" ${target === 'en' ? 'selected' : ''}>始终译为英文</option>
             </select>

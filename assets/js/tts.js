@@ -20,7 +20,7 @@
   function langCode(lang) {
     if (!lang) return 'en-US';
     lang = lang.toLowerCase();
-    if (lang.startsWith('zh')) return 'zh-CN';
+    if (lang.startsWith('zh') || lang.startsWith('wenyan')) return 'zh-CN';
     if (lang.startsWith('ja')) return 'ja-JP';
     if (lang.startsWith('ko')) return 'ko-KR';
     if (lang.startsWith('en')) return 'en-US';

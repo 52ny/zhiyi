@@ -1,7 +1,7 @@
 /* 知忆 · AI 能力（可选，用户自带 Key） */
 (function (Z) {
   const PRESETS = {
-    agent: { label: '内置智能体（免下载、免 Key）', baseUrl: 'https://text.pollinations.ai/openai', model: 'openai' },
+    agent: { label: '内置智能体（免下载、免 Key）', baseUrl: 'https://api.llm7.io/v1', model: 'gpt-oss:20b' },
     online: { label: '在线知识库（免下载、免 Key）', baseUrl: '', model: 'baike+moegirl' },
     local: { label: '本地模型（浏览器内）', baseUrl: '', model: 'onnx-community/Qwen2.5-0.5B-Instruct' },
     deepseek: { label: 'DeepSeek（需自己的 Key）', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
@@ -77,32 +77,38 @@
 
   async function agentChat(messages, opts = {}) {
     const c = cfg();
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), opts.timeout || 90000);
-    try {
-      const res = await fetch('https://text.pollinations.ai/openai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: c.model || 'openai',
-          messages,
-          temperature: opts.temperature == null ? 0.5 : opts.temperature,
-          max_tokens: opts.maxTokens || 2000,
-          reasoning_effort: 'low',
-          referrer: 'zhiyi'
-        }),
-        signal: controller.signal
-      });
-      if (!res.ok) throw new Error('内置智能体暂时不可用（' + res.status + '）');
-      const data = await res.json();
-      const text = data.choices?.[0]?.message?.content || '';
-      if (!text.trim()) throw new Error('内置智能体没有返回内容');
-      return text;
-    } catch (e) {
-      if (e.name === 'AbortError') throw new Error('内置智能体响应超时');
-      if (/Failed to fetch|NetworkError/i.test(e.message)) throw new Error('无法连接内置智能体（网络限制），可改用在线知识库或自己的 Key');
-      throw e;
-    } finally { clearTimeout(timer); }
+    const llm7Model = !c.model || c.model === 'openai' || c.model === 'gpt-oss:20b' ? 'gpt-oss:20b' : c.model;
+    const endpoints = [
+      { url: 'https://api.llm7.io/v1/chat/completions', model: llm7Model },
+      { url: 'https://text.pollinations.ai/openai', model: 'openai' }
+    ];
+    const errors = [];
+    for (const ep of endpoints) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), opts.timeout || 45000);
+      try {
+        const res = await fetch(ep.url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: ep.model,
+            messages,
+            temperature: opts.temperature == null ? 0.5 : opts.temperature,
+            max_tokens: opts.maxTokens || 2000,
+            reasoning_effort: 'low'
+          }),
+          signal: controller.signal
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        const text = data.choices?.[0]?.message?.content || '';
+        if (!text.trim()) throw new Error('空响应');
+        return text;
+      } catch (e) {
+        errors.push(e.name === 'AbortError' ? '超时' : (e.message || '失败'));
+      } finally { clearTimeout(timer); }
+    }
+    throw new Error('内置智能体暂时不可用（' + errors.join('；') + '），可改用在线知识库或自己的 Key');
   }
 
   async function chat(messages, opts = {}) {

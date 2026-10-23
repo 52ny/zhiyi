@@ -54,6 +54,7 @@
   }
 
   function targetFor(lang) {
+    if (lang === 'wenyan') return { code: 'zh', name: '白话文', pair: null, classical: true };
     if (lang === 'zh') return { code: 'en', name: '英语', pair: 'zh-CN|en' };
     if (lang === 'ja') return { code: 'zh', name: '中文', pair: 'ja|zh-CN' };
     return { code: 'zh', name: '中文', pair: 'en|zh-CN' };
@@ -61,8 +62,9 @@
 
   function targetFromSetting(lang) {
     const pref = Z.store.get('translate.target', 'auto');
-    if (pref === 'zh') return { code: 'zh', name: '中文', pair: null };
-    if (pref === 'en') return { code: 'en', name: '英语', pair: null };
+    if (pref === 'wenyan') return { code: 'zh', name: '白话文', pair: null, classical: true };
+    if (pref === 'zh') return { code: 'zh', name: '中文', pair: null, classical: lang === 'wenyan' };
+    if (pref === 'en') return { code: 'en', name: '英语', pair: null, classical: false };
     return targetFor(lang);
   }
 
@@ -108,16 +110,50 @@
     const from = opts.fromLang || Z.langOf(texts.join(' '));
     const target = opts.to || targetFromSetting(from);
     const to = target.code;
+    const classical = from === 'wenyan' || !!target.classical;
+    const prefix = classical ? 'wy2:' : 'ai:';
+    const ck = (t) => prefix + from + '>' + to + ':' + t;
     const out = new Array(texts.length).fill('');
 
     // 已缓存
     const pending = [];
     texts.forEach((t, i) => {
-      const hit = cacheGet('ai:' + from + '>' + to + ':' + t);
+      const hit = cacheGet(ck(t));
       if (hit) out[i] = hit;
       else if (t.trim()) pending.push(i);
     });
     if (!pending.length) return out;
+
+    // 文言文 → 白话文：只能由智能体完成
+    if (classical) {
+      if (!Z.AI.isChat()) throw new Error('文言文翻译需要内置智能体或云端 AI');
+      const chunks = [];
+      for (let k = 0; k < pending.length; k += 4) chunks.push(pending.slice(k, k + 4));
+      for (const chunk of chunks) {
+        const payload = chunk.map((i) => `[${i}] ${texts[i]}`).join('\n');
+        const raw = await Z.AI.chat([
+          { role: 'system', content: '你是文言文翻译专家。必须把文言文改写成白话文（现代汉语），严禁照抄原文；逐段输出，格式为「[编号] 白话译文」，不要解释。' },
+          { role: 'user', content: '示例：\n[0] 学而时习之，不亦说乎？\n[0] 学了知识并按时温习，不也很愉快吗？\n\n请翻译：\n' + payload }
+        ], { temperature: 0.3, maxTokens: 2000 });
+        raw.split(/\n+/).forEach((line) => {
+          const m = line.match(/^\s*\[(\d+)\]\s*(.+)$/);
+          if (m) {
+            const i = Number(m[1]);
+            if (i >= 0 && i < out.length) out[i] = m[2].trim();
+          }
+        });
+        if (!chunk.some((i) => out[i])) {
+          const lines = raw.split(/\n+/).map((x) => x.replace(/^\s*\[?\d+\]?\s*/, '').trim()).filter(Boolean);
+          chunk.forEach((i, k) => { if (lines[k]) out[i] = lines[k]; });
+        }
+        // 模型照抄原文时视为失败，避免把原文当译文展示
+        chunk.forEach((i) => { if (out[i] && out[i].trim() === texts[i].trim()) out[i] = ''; });
+        if (opts.onProgress) opts.onProgress(chunk);
+      }
+      out.forEach((t, i) => { if (t) cacheSet(ck(texts[i]), t); });
+      if (!out.some(Boolean)) throw new Error('文言文翻译未返回白话译文，请稍后重试');
+      return out;
+    }
 
     // 批量翻译默认走免费接口（更快）；AI 仅用于显式 preferAI 的场景
     const useAI = !!opts.preferAI && Z.AI.isChat();

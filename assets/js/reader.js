@@ -85,6 +85,7 @@
         <button class="sel-btn" data-sel="note"><span data-ico="note"></span>笔记</button>
         <button class="sel-btn" data-sel="speak"><span data-ico="volume"></span>朗读</button>
         <button class="sel-btn" data-sel="trans"><span data-ico="translate"></span>翻译</button>
+        <button class="sel-btn" data-sel="ask"><span data-ico="sparkle"></span>问 AI</button>
       </div>
     </div>`;
   }
@@ -272,6 +273,11 @@
       if (a === 'tts-stop') { stopAll(); return; }
     }
 
+    const selBtn = e.target.closest('[data-sel]');
+    if (selBtn) { handleSelAct(selBtn.dataset.sel); return; }
+    const colorBtn = e.target.closest('.hl-dot[data-color]');
+    if (colorBtn) { addHighlight(colorBtn.dataset.color); return; }
+
     const side = e.target.closest('[data-side]');
     if (side) {
       ctx.sideTab = side.dataset.side;
@@ -337,7 +343,7 @@
       const end = offsetIn(startMain, range.endContainer, range.endOffset);
       const text = range.toString();
       if (!text.trim() || end <= start) { hideSelbar(); return; }
-      ctx.pendingSel = { block: i, start, end, text };
+      ctx.pendingSel = { block: i, start, end, text, rect: range.getBoundingClientRect() };
       showSelbar(range.getBoundingClientRect());
     }, 10);
   }
@@ -361,6 +367,52 @@
   function hideSelbar() {
     const bar = Z.$('#selbar', ctx.container);
     if (bar) bar.hidden = true;
+  }
+
+  async function handleSelAct(act) {
+    const s = ctx.pendingSel;
+    if (!s || !s.text) return;
+    if (act === 'note') {
+      const hl = addHighlight('yellow');
+      if (hl) openHighlightPopover(hl, s.rect || { left: 120, bottom: 160, width: 0 });
+      return;
+    }
+    if (act === 'speak') {
+      Z.TTS.speak(s.text, { lang: ctx.doc.lang });
+      hideSelbar();
+      return;
+    }
+    if (act === 'ask') {
+      if (!Z.ChatPage) return;
+      Z.ChatPage.prefill(`请解释下面这段内容，并指出重点：\n「${s.text}」`, ctx.doc.id);
+      hideSelbar();
+      location.hash = '#/chat';
+      return;
+    }
+    if (act === 'trans') {
+      hideSelbar();
+      const pop = Z.$('#popover');
+      pop.hidden = false;
+      pop.innerHTML = `<div class="pop-card">
+        <div class="pop-quote">${Z.esc(Z.truncate(s.text, 160))}</div>
+        <div class="word-loading"><span class="spinner small"></span> 翻译中…</div>
+        <div id="sel-trans"></div>
+      </div>`;
+      const rect = s.rect || { left: 120, bottom: 160, width: 0 };
+      const w = 300;
+      pop.style.left = Z.clamp(rect.left + window.scrollX - w / 2, 8, document.documentElement.clientWidth - w - 8) + 'px';
+      pop.style.top = (rect.bottom + window.scrollY + 8) + 'px';
+      try {
+        const res = await Z.Translate.translateBlocks([s.text], { fromLang: ctx.doc.lang });
+        const out = Z.$('#sel-trans', pop);
+        Z.$('.word-loading', pop)?.remove();
+        if (out) out.innerHTML = res[0] ? `<div class="trans" style="display:block">${Z.esc(res[0])}</div>` : '<p class="muted small">翻译失败，稍后再试。</p>';
+      } catch (e) {
+        Z.$('.word-loading', pop)?.remove();
+        const out = Z.$('#sel-trans', pop);
+        if (out) out.innerHTML = `<p class="muted small">${Z.esc(e.message)}</p>`;
+      }
+    }
   }
 
   function addHighlight(color, note = '') {
@@ -527,8 +579,7 @@
     };
   }
 
-  function openBlockNote(i) {
-    const block = ctx.doc.blocks[i];
+  function openBlockNote(i) {    const block = ctx.doc.blocks[i];
     const rect = Z.$(`.blk[data-i="${i}"]`, ctx.container).getBoundingClientRect();
     ctx.pendingSel = { block: i, start: 0, end: block.text.length, text: block.text };
     const hl = addHighlight('yellow');
