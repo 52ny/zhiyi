@@ -269,7 +269,7 @@
         <p class="muted small">用自己的话讲一遍，再自检缺口。</p>
         <textarea class="input area" id="feynman-input" rows="5" placeholder="我这样理解「${esc(r.name)}」…">${esc(state.feynman)}</textarea>
         <div class="feynman-actions">
-          <button class="btn primary small" data-lab="feynman"><span data-ico="sparkle"></span>${Z.AI.isChat() ? 'AI 点评我的解释' : '自检我的解释'}</button>
+          <button class="btn primary small" data-lab="feynman"><span data-ico="sparkle"></span>${Z.AI.isChat() || Z.AI.isOnline() ? 'AI 点评我的解释' : '自检我的解释'}</button>
         </div>
         <div id="feynman-out"></div>
       </section>
@@ -288,7 +288,7 @@
     const r = state.result;
     const out = Z.$('#feynman-out');
 
-    if (Z.AI.isChat()) {
+    if (Z.AI.ensureAgent()) {
       out.innerHTML = `<div class="fb-loading"><span class="spinner small"></span> AI 正在阅读你的解释…</div>`;
       try {
         const fb = await Z.AI.feynman(r.name, text);

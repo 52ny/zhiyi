@@ -487,8 +487,8 @@
       return;
     }
     if (act === 'ai') {
-      if (!Z.AI.isChat()) {
-        Z.toast('AI 导图需要本地模型或云端接口；在线知识库只用于知识点拆解', 'error');
+      if (!Z.AI.ensureAgent()) {
+        Z.toast('AI 导图需要内置智能体、本地模型或云端接口', 'error');
         location.hash = '#/settings';
         return;
       }

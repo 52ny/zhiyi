@@ -351,7 +351,7 @@
       renderDeck(container, doc, opts);
     });
     Z.$('#deck-ai', container)?.addEventListener('click', async () => {
-      if (!Z.AI.isChat()) { Z.toast('AI 出题需要本地模型或云端接口', 'error'); return; }
+      if (!Z.AI.ensureAgent()) { Z.toast('AI 出题需要内置智能体、本地模型或云端接口', 'error'); return; }
       const busy = Z.busy('AI 正在出题…', '从资料中提取可考的记忆点');
       try {
         const text = doc.blocks.map((b) => b.text).join('\n');

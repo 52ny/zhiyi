@@ -13,10 +13,13 @@
     const c = Z.store.get('ai', {});
     const provider = c.provider || 'agent';
     const preset = PRESETS[provider] || PRESETS.agent;
+    const fixed = provider === 'agent' || provider === 'online' || provider === 'local';
     return {
       provider,
-      baseUrl: c.baseUrl || preset.baseUrl,
-      model: c.model || preset.model,
+      baseUrl: fixed ? preset.baseUrl : (c.baseUrl || preset.baseUrl),
+      model: fixed
+        ? (provider === 'agent' && c.model && c.model !== 'openai' ? c.model : preset.model)
+        : (c.model || preset.model),
       apiKey: c.apiKey || '',
       temperature: c.temperature == null ? 0.4 : c.temperature
     };
@@ -42,6 +45,17 @@
   /** 是否能做自由对话（在线知识库只能拆解知识点） */
   function isChat() {
     if (isOnline()) return false;
+    return isReady();
+  }
+
+  /** 需要对话能力时，若当前模式不支持，自动切到内置智能体 */
+  function ensureAgent() {
+    if (isAgent()) return true;
+    if (isOnline() || (isLocal() && !isReady())) {
+      save({ provider: 'agent', model: PRESETS.agent.model });
+      try { Z.toast('已自动切换到内置智能体', 'info', 2400); } catch (e) {}
+      return true;
+    }
     return isReady();
   }
 
@@ -80,6 +94,7 @@
     const llm7Model = !c.model || c.model === 'openai' || c.model === 'gpt-oss:20b' ? 'gpt-oss:20b' : c.model;
     const endpoints = [
       { url: 'https://api.llm7.io/v1/chat/completions', model: llm7Model, extra: {} },
+      { url: 'https://api.llm7.io/v1/chat/completions', model: 'minimax-m2.7', extra: {} },
       { url: 'https://api.llm7.io/v1/chat/completions', model: llm7Model, extra: {}, retry: true },
       { url: 'https://text.pollinations.ai/openai', model: 'openai', extra: { reasoning_effort: 'low' } }
     ];
@@ -109,11 +124,17 @@
         errors.push(e.name === 'AbortError' ? '超时' : (e.message || '失败'));
       } finally { clearTimeout(timer); }
     }
-    throw new Error('内置智能体暂时不可用（' + errors.join('；') + '），可改用在线知识库或自己的 Key');
+    throw new Error('内置智能体暂时不可用（' + errors.join('；') + '）。可在侧栏「AI 助手」点“立即使用”，或改用在线知识库');
   }
 
   async function chat(messages, opts = {}) {
     const c = cfg();
+    // 用户选的是在线知识库/未加载的本地模型时，自动切回内置智能体，避免“不可用”
+    if ((isOnline() || (isLocal() && !isReady())) && opts.autoAgent !== false) {
+      save({ provider: 'agent', model: PRESETS.agent.model });
+      try { Z.toast('已自动切换到内置智能体', 'info', 2400); } catch (e) {}
+      return agentChat(messages, opts);
+    }
     if (isAgent()) return agentChat(messages, opts);
     if (isOnline()) throw new Error('当前是「在线知识库」模式，只支持知识点拆解；翻译、出题请切换内置智能体或本地/云端接口');
     if (!isReady()) throw new Error(isLocal() ? '本地模型尚未加载：请到「设置 → AI 增强」点“加载模型”' : '尚未配置 AI：请到「设置 → AI 增强」填写 API Key');
@@ -289,7 +310,7 @@ ${text.slice(0, 5000)}
   }
 
   Z.AI = {
-    PRESETS, cfg, save, isReady, isChat, isAgent, isLocal, isOnline, chat, test, translate, explain, feynman, mindmap, cards, parseJSON,
+    PRESETS, cfg, save, isReady, isChat, isAgent, isLocal, isOnline, ensureAgent, chat, test, translate, explain, feynman, mindmap, cards, parseJSON,
     label() {
       const c = cfg();
       if (c.provider === 'agent') return '内置智能体 · GPT-OSS 20B';

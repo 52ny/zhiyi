@@ -139,7 +139,7 @@
     renderLog();
     saveHistory(ui.msgs);
     try {
-      if (!Z.AI.isChat()) throw new Error('当前是「在线知识库」模式，聊天需切换为内置智能体或云端 AI');
+      if (!Z.AI.ensureAgent()) throw new Error('AI 暂不可用：请在设置中检查内置智能体或填写接口 Key');
       const ctx = contextText();
       const history = ui.msgs.slice(-8).map((m) => ({ role: m.role, content: m.content }));
       const payload = ctx ? history.concat([{ role: 'system', content: '以下是用户当前打开的资料，回答时优先参考：' + ctx }]) : history;

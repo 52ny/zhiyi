@@ -126,7 +126,7 @@
 
     // 文言文 → 白话文：只能由智能体完成
     if (classical) {
-      if (!Z.AI.isChat()) throw new Error('文言文翻译需要内置智能体或云端 AI');
+      if (!Z.AI.ensureAgent()) throw new Error('文言文翻译需要内置智能体或云端 AI');
       const chunks = [];
       for (let k = 0; k < pending.length; k += 5) chunks.push(pending.slice(k, k + 5));
       for (let ci = 0; ci < chunks.length; ci++) {
