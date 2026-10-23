@@ -1,6 +1,6 @@
 /* 知忆 · 通用 AI 助手（内置智能体，免下载、免 Key） */
 (function (Z) {
-  const SYSTEM = '你是「知忆」的 AI 学习助手，面向大众用户。回答要准确、简洁、可执行：先给结论，再给必要步骤或例子；不确定时直说。涉及公式时写出完整式子并标注符号含义。使用简体中文，除非用户要求其他语言。';
+  const SYSTEM = '你是「知忆」的 AI 学习助手，面向大众用户。回答要准确、简洁、可执行：先给结论，再给必要步骤或例子；默认控制在 300 字以内，用户要求详细时再展开。不确定时直说。涉及公式时写出完整式子并标注符号含义。使用简体中文，除非用户要求其他语言。';
   const CHIPS = [
     { label: '解释一个概念', text: '请用初学者能懂的话解释：' },
     { label: '翻译一段', text: '请翻译下面这段内容，保持原意、语气自然：\n' },
@@ -86,7 +86,12 @@
   }
 
   function format(text) {
-    return Z.esc(text || '').replace(/\n/g, '<br>');
+    let s = Z.esc(text || '');
+    s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/^\s*[-*]\s+(.+)$/gm, '• $1')
+      .replace(/^\s*(\d+)[.、]\s+(.+)$/gm, '$1. $2');
+    return s.replace(/\n/g, '<br>');
   }
 
   function bind() {
@@ -143,7 +148,7 @@
       const ctx = contextText();
       const history = ui.msgs.slice(-8).map((m) => ({ role: m.role, content: m.content }));
       const payload = ctx ? history.concat([{ role: 'system', content: '以下是用户当前打开的资料，回答时优先参考：' + ctx }]) : history;
-      const reply = await Z.AI.chat([{ role: 'system', content: SYSTEM }, ...payload], { temperature: 0.5, maxTokens: 1600 });
+      const reply = await Z.AI.chat([{ role: 'system', content: SYSTEM }, ...payload], { temperature: 0.4, maxTokens: 900 });
       ui.msgs.push({ role: 'assistant', content: reply.trim() });
     } catch (e) {
       ui.msgs.push({ role: 'assistant', content: '抱歉，没能回答：' + e.message });
