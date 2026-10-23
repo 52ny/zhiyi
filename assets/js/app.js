@@ -390,6 +390,8 @@
     const t = doc.blocks.map((b) => b.text || '').join(' ');
     if (doc.lang === 'zh' && Z.isClassical && Z.isClassical(t)) {
       doc.lang = 'wenyan';
+      // 之前按「中→英」生成的译文无效，清空以便重新译为白话
+      doc.translations = {};
       Z.DB.putDoc(doc);
       return doc;
     }
