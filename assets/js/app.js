@@ -972,6 +972,7 @@
       <section class="set-card about">
         <div class="about-brand"><span class="brand-mark">知</span><div><strong>知忆 ZHIYI</strong><em>把资料变成记得住的知识</em></div></div>
         <p>纯静态、本地优先。没有账号，资料不上传。</p>
+        <p class="muted small">界面版本 20261103 · 学习空间与皮肤在首页</p>
         <p class="muted small">快捷键：U 导入 · Space 翻卡 · 1–4 评分 · Esc 退出</p>
       </section>
     </div>`;
