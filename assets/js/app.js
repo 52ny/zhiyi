@@ -751,7 +751,7 @@
     const sb = Z.store.get('supabase', {});
     const sess = Z.Auth ? Z.Auth.create(sb).session() : null;
     view.innerHTML = `<div class="auth-page"><div class="auth-card">
-      <a class="back-link" href="#/settings">← 返回设置</a>
+      <a class="back-link" href="#/home">← 返回首页</a>
       <span class="eyebrow">ZHIYI ACCOUNT</span>
       <h1>${sess && sess.user ? '欢迎回来' : '登录 / 注册'}</h1>
       <p class="auth-sub">${sess && sess.user ? Z.esc(sess.user.email || '') + ' · 资料将同步到你的云端' : '登录后可跨设备同步资料与复习进度'}</p>
@@ -1193,6 +1193,10 @@
 
   async function init() {
     applyTheme();
+    // 默认进入文库，避免残留 #/auth 让用户以为网站只有登录页
+    if (!location.hash || location.hash === '#/' || location.hash === '#') {
+      history.replaceState(null, '', '#/home');
+    }
     // ?demo=1 一键进入答辩演示模式；?demo=0 退出
     const q = new URLSearchParams(location.search);
     if (q.get('demo') === '1') Z.store.set('demoMode', true);
