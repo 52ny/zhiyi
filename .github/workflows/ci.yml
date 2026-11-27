@@ -19,6 +19,7 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run verify
+      - run: npm run build:report
 
   e2e:
     runs-on: ubuntu-latest

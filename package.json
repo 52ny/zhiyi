@@ -16,7 +16,10 @@
     "verify": "node scripts/verify.mjs",
     "typecheck": "tsc --noEmit",
     "check": "npm run lint && npm run typecheck && npm test && npm run verify",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "build": "vite build",
+    "size": "node scripts/report-size.mjs",
+    "build:report": "npm run build && npm run size"
   },
   "devDependencies": {
     "@playwright/test": "^1.65.1",
@@ -26,6 +29,7 @@
     "jsdom": "^25.0.1",
     "prettier": "^3.10.1",
     "typescript": "^7.0.2",
+    "vite": "^6.4.6",
     "vitest": "^4.1.12"
   }
 }
