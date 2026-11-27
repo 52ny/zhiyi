@@ -187,9 +187,14 @@
   function fixClassicOcr(text) {
     let s = String(text || '');
     // OCR 常把每个汉字用空格隔开，先合并再匹配
-    s = s.replace(/([\u4e00-\u9fff])\s+(?=[\u4e00-\u9fff])/g, '$1')
-      .replace(/\s+([，。；：！？、])/g, '$1')
-      .replace(/([，。；：！？、])\s+/g, '$1');
+    s = s.replace(/([\u4e00-\u9fff])\s+(?=[\u4e00-\u9fff])/g, '$1');
+    const normPunct = (x) => x
+      .replace(/([\u4e00-\u9fff])\s*[:：]\s*/g, '$1：')
+      .replace(/([\u4e00-\u9fff])\s*[,，]\s*/g, '$1，')
+      .replace(/([\u4e00-\u9fff])\s*[;；]\s*/g, '$1；')
+      .replace(/([\u4e00-\u9fff])\s*\.(?=\s*[”"’']|\s|$)/g, '$1。')
+      .replace(/([，。；：])\s+/g, '$1');
+    s = normPunct(s);
     const rules = [
       [/([备雷需雪霸])武伯/g, '孟武伯'],
       [/(村|材|付|树)夏(?=问孝)/g, '子夏'],
@@ -210,7 +215,7 @@
       [/属与回言/g, '吾与回言']
     ];
     rules.forEach(([re, to]) => { s = s.replace(re, to); });
-    return s;
+    return normPunct(s);
   }
 
   /** OCR 错字校正：只改识别错误，不改写内容 */

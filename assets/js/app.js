@@ -49,6 +49,19 @@
   function setTheme(t) { Z.store.set('theme', t); applyTheme(); }
   function setPalette(p) { Z.store.set('palette', p); applyTheme(); }
 
+  /** 演示模式：补齐示例资料 + 顶部提示，答辩/离线演示用 */
+  async function setDemoMode(on) {
+    Z.store.set('demoMode', !!on);
+    document.body.classList.toggle('demo-mode', !!on);
+    const bar = Z.$('#demo-bar');
+    if (bar) bar.hidden = !on;
+    if (on) {
+      await Z.Demo.seed(true);
+      try { refresh(); } catch (e) {}
+      Z.toast('演示模式已开启：示例资料已补齐', 'ok', 2600);
+    }
+  }
+
   function localStatusText(snap) {
     const s = snap || Z.LocalAI.snapshot();
     if (s.error) return s.error;
@@ -732,6 +745,7 @@
     const voices = Z.TTS.voices;
     const zhVoices = voices.filter((v) => (v.lang || '').toLowerCase().startsWith('zh'));
     const enVoices = voices.filter((v) => (v.lang || '').toLowerCase().startsWith('en'));
+    const demoMode = Z.store.get('demoMode', false);
 
     view.innerHTML = `<div class="settings">
       <div class="settings-head"><span class="eyebrow">SETTINGS</span><h1>设置</h1></div>
@@ -853,6 +867,9 @@
           <button class="btn ghost small danger" id="data-clear">清空全部数据</button>
           <input type="file" id="data-file" accept=".json" hidden>
           <span class="set-status" id="storage-status"></span>
+        </div>
+        <div class="set-actions">
+          <label class="check-line"><input type="checkbox" id="demo-toggle" ${demoMode ? 'checked' : ''}> 演示模式：自动补齐示例资料，答辩时一键可用</label>
         </div>
       </section>
 
@@ -987,6 +1004,7 @@
       Z.toast('已导出数据（不含封面图片）', 'ok');
     });
     Z.$('#data-import-btn').addEventListener('click', () => Z.$('#data-file').click());
+    Z.$('#demo-toggle')?.addEventListener('change', (e) => setDemoMode(e.target.checked));
     Z.$('#data-file').addEventListener('change', async (e) => {
       const f = e.target.files[0];
       if (!f) return;
@@ -1076,6 +1094,10 @@
 
   async function init() {
     applyTheme();
+    // ?demo=1 一键进入答辩演示模式；?demo=0 退出
+    const q = new URLSearchParams(location.search);
+    if (q.get('demo') === '1') Z.store.set('demoMode', true);
+    if (q.get('demo') === '0') Z.store.set('demoMode', false);
     // 旧用户默认切到免下载的内置智能体；仍可在设置里改回
     if (!Z.store.get('aiMigrated', false)) {
       const cur = Z.store.get('ai', {});
@@ -1089,6 +1111,16 @@
     Z.LocalAI.subscribe(updateAiUI);
     updateAiUI();
     await Z.Demo.seed();
+    if (Z.store.get('demoMode', false)) {
+      document.body.classList.add('demo-mode');
+      const bar = Z.$('#demo-bar');
+      if (bar) bar.hidden = false;
+      await Z.Demo.seed(true);
+    }
+    Z.$('#demo-exit')?.addEventListener('click', () => setDemoMode(false));
+    if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
     await route();
   }
 

@@ -1,0 +1,17 @@
+{
+  "name": "知忆 ZHIYI · 把资料变成记得住的知识",
+  "short_name": "知忆",
+  "description": "导入 PDF、图片、文档，自动拆解知识点、生成导图与双语对照，并用间隔复习帮你记住。",
+  "lang": "zh-CN",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f4f1ea",
+  "theme_color": "#176b5b",
+  "icons": [
+    { "src": "assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

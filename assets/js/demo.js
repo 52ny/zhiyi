@@ -70,12 +70,37 @@
     }), { forceType: 'knowledge' });
   }
 
-  async function seed() {
+  function classicalDemo() {
+    const blocks = [
+      { t: 'h1', text: '《论语》论孝（选段）', page: 1 },
+      { t: 'p', text: '孟懿子问孝。子曰：“无违。”樊迟御，子告之曰：“孟孙问孝于我，我对曰‘无违’。”樊迟曰：“何谓也？”子曰：“生，事之以礼；死，葬之以礼，祭之以礼。”', page: 1 },
+      { t: 'p', text: '孟武伯问孝。子曰：“父母唯其疾之忧。”', page: 1 },
+      { t: 'p', text: '子游问孝。子曰：“今之孝者，是谓能养。至于犬马，皆能有养；不敬，何以别乎？”', page: 1 },
+      { t: 'p', text: '子夏问孝。子曰：“色难。有事，弟子服其劳；有酒食，先生馔，曾是以为孝乎？”', page: 1 },
+      { t: 'p', text: '子曰：“吾与回言终日，不违，如愚。退而省其私，亦足以发，回也不愚。”', page: 1 }
+    ];
+    return Z.Import.finishDoc(Z.Import.makeDoc({
+      title: '《论语》论孝（文言文示例）',
+      type: 'text',
+      source: 'demo',
+      lang: 'wenyan',
+      blocks,
+      highlights: [
+        { id: Z.uid('hl'), block: 2, start: 0, end: 6, text: '父母唯其疾之忧', color: 'yellow', note: '只担忧父母的疾病，其余不妄加干涉', createdAt: Date.now() - 3000 }
+      ]
+    }), { forceType: 'text' });
+  }
+
+  async function seed(force) {
     const docs = await Z.DB.allDocs();
-    if (docs.length) return false;
-    await Z.DB.putDoc(englishDemo());
-    await Z.DB.putDoc(knowledgeDemo());
-    return true;
+    if (docs.length && !force) return false;
+    const has = (title) => docs.some((d) => d.title === title);
+    const demos = [englishDemo(), knowledgeDemo(), classicalDemo()];
+    let added = 0;
+    for (const d of demos) {
+      if (!has(d.title)) { await Z.DB.putDoc(d); added++; }
+    }
+    return added > 0;
   }
 
   Z.Demo = { seed };

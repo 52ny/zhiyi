@@ -6,3 +6,6 @@ _pkg/
 _raw/
 _tmp_*
 *.log
+_test/
+node_modules/
+coverage/
