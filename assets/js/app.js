@@ -269,6 +269,7 @@
     if (r.name === 'lab') { navTo('lab'); setCrumb('<span>知识工坊</span>'); setTopActions(''); Z.Lab.mount(view); return; }
     if (r.name === 'chat') { navTo('chat'); setCrumb('<span>问 AI</span>'); setTopActions(''); Z.ChatPage.mount(view, docs); return; }
     if (r.name === 'settings') { navTo('settings'); setCrumb('<span>设置</span>'); setTopActions(''); renderSettings(view); return; }
+    if (r.name === 'auth') { setCrumb('<span>账号</span>'); setTopActions(''); renderAuth(view); return; }
     navTo('home');
     renderHome(view);
   }
@@ -745,6 +746,41 @@
   Z.openImport = openImport;
   Z.importFiles = importFiles;
 
+  /* ================= 独立登录页 ================= */
+  function renderAuth(view) {
+    const sb = Z.store.get('supabase', {});
+    const sess = Z.Auth ? Z.Auth.create(sb).session() : null;
+    view.innerHTML = `<div class="auth-page"><div class="auth-card">
+      <a class="back-link" href="#/settings">← 返回设置</a>
+      <span class="eyebrow">ZHIYI ACCOUNT</span>
+      <h1>${sess && sess.user ? '欢迎回来' : '登录 / 注册'}</h1>
+      <p class="auth-sub">${sess && sess.user ? Z.esc(sess.user.email || '') + ' · 资料将同步到你的云端' : '登录后可跨设备同步资料与复习进度'}</p>
+      <label>项目 URL<input class="input" id="sb-url" value="${Z.esc(sb.url || '')}" placeholder="https://xxx.supabase.co"></label>
+      <label>项目密钥（anon key）<input class="input" id="sb-key" type="password" value="${Z.esc(sb.key || '')}" placeholder="eyJhbGciOi..."></label>
+      <label>邮箱<input class="input" id="auth-email" placeholder="you@example.com"></label>
+      <label>密码<input class="input" id="auth-pass" type="password" placeholder="至少 6 位"></label>
+      <label>验证码（可选）<input class="input" id="auth-code" placeholder="邮箱收到的 6 位数字"></label>
+      <button class="btn sage" id="auth-login">登录</button>
+      <div class="auth-links">
+        <button id="auth-signup">没有账号？注册</button>
+        <button id="auth-send-code">验证码登录</button>
+      </div>
+      <div class="set-status" id="auth-status">${sess && sess.user ? '已登录' : '未登录'}</div>
+      ${sess && sess.user ? '<button class="btn ghost small" id="auth-logout" style="width:100%;margin-top:10px">退出登录</button>' : ''}
+    </div></div>`;
+    const cfg = () => ({ url: Z.$('#sb-url').value.trim(), key: Z.$('#sb-key').value.trim() });
+    const status = (t) => { const el = Z.$('#auth-status'); if (el) el.textContent = t; };
+    const run = async (fn) => {
+      try { const c = cfg(); Z.store.set('supabase', c); await fn(Z.Auth.create(c)); updateAuthEntry(); Z.toast('操作成功', 'ok'); }
+      catch (e) { status('失败：' + e.message); Z.toast(e.message, 'error', 4000); }
+    };
+    Z.$('#auth-login')?.addEventListener('click', () => run(async (a) => { const s = await a.signIn(Z.$('#auth-email').value.trim(), Z.$('#auth-pass').value); status('已登录：' + (s.user?.email || '')); location.hash = '#/home'; }));
+    Z.$('#auth-signup')?.addEventListener('click', () => run(async (a) => { await a.signUp(Z.$('#auth-email').value.trim(), Z.$('#auth-pass').value); status('注册成功，请查收确认邮件'); }));
+    Z.$('#auth-send-code')?.addEventListener('click', () => run(async (a) => { await a.sendCode(Z.$('#auth-email').value.trim()); status('验证码已发送，请查收邮箱'); }));
+    Z.$('#auth-code')?.addEventListener('change', () => run(async (a) => { const s = await a.verifyCode(Z.$('#auth-email').value.trim(), Z.$('#auth-code').value.trim()); status('已登录：' + (s.user?.email || '')); location.hash = '#/home'; }));
+    Z.$('#auth-logout')?.addEventListener('click', () => { Z.Auth.create(cfg()).signOut(); updateAuthEntry(); renderAuth(view); });
+  }
+
   /* ================= 设置 ================= */
   function renderSettings(view) {
     const ai = Z.AI.cfg();
@@ -1150,14 +1186,7 @@
     });
 
     window.addEventListener('hashchange', route);
-    const goAuth = () => {
-      location.hash = '#/settings';
-      setTimeout(() => {
-        const el = Z.$('#auth-email');
-        el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-        el?.focus();
-      }, 100);
-    };
+    const goAuth = () => { location.hash = '#/auth'; };
     Z.$('#rail-auth')?.addEventListener('click', goAuth);
     Z.$('#top-auth')?.addEventListener('click', goAuth);
   }
