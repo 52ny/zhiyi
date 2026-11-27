@@ -5,11 +5,23 @@
   "type": "module",
   "description": "知忆：把资料变成记得住的知识（纯静态、本地优先）",
   "scripts": {
+    "dev": "http-server . -p 8777 -c-1 --silent",
+    "serve": "http-server . -p 8777 -c-1 --silent",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "verify": "node scripts/verify.mjs",
+    "check": "npm run lint && npm test && npm run verify"
   },
   "devDependencies": {
+    "eslint": "^9.39.5",
+    "globals": "^17.14.0",
+    "http-server": "^14.1.1",
     "jsdom": "^25.0.1",
+    "prettier": "^3.10.1",
     "vitest": "^4.1.12"
   }
 }

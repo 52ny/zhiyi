@@ -429,7 +429,6 @@
       createdAt: Date.now()
     };
     ctx.doc.highlights.push(hl);
-    ctx.bilingual = ctx.bilingual; // 保持
     ctx.save(ctx.doc);
     window.getSelection()?.removeAllRanges();
     hideSelbar();

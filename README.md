@@ -1,56 +1,84 @@
 # 知忆 ZHIYI
 
-把资料变成记得住的知识。纯静态、本地优先的学习工作台，无需构建，直接部署到 GitHub Pages。
+把资料变成记得住的知识：导入 PDF / 图片 / Word / PPT / Markdown / TXT，自动拆解知识点、生成思维导图与双语对照，配合点词朗读、批注与间隔复习，形成「理解 → 练习 → 记住」的闭环。
+
+在线体验：https://52ny.github.io/zhiyi/
 
 ## 功能
 
-- **导入**：PDF、图片（OCR）、DOCX、PPTX、Markdown、TXT、HTML，或直接粘贴文本
-  - 可填写「希望提取什么」（只要正文 / 只要题目 / 只要公式定义 / 只要单词），自动去页眉页脚、页码、广告并按意图筛选
-  - 导入前有校对弹窗，可直接修改识别错误的文字；图片先放大、灰度增强，低置信度时换版面模式复识别，并支持「AI 校正错字」
-  - 接智能体或云端接口时，可按描述让 AI 重新整理提取结果
-- **阅读**：双语对照（含文言文→白话文）、点词朗读与查词、四色高亮与笔记、整段朗读、专注模式；选中文字可直接「问 AI」
-- **问 AI**：内置通用助手，讲解、翻译、出题、润色、学习计划；可附带当前资料作为上下文
-- **思维导图**：自动从文档结构生成，可增删改、折叠、回忆模式、导出 SVG/PNG
-- **手绘批注**：PDF / 图片 / 文本上钢笔、荧光笔、橡皮，笔画存本机
-- **复习**：抽认卡与 SM-2 间隔重复，支持单词、问答、填空、翻译四类卡片
-- **知识工坊**：输入知识点，得到定义拆解、直观理解、条件、误区、变式、拓展、自测与费曼自检
-- **外观**：纸白 / 夜色两种主题，五种色系
+- 导入：PDF、图片 OCR、DOCX、PPTX、Markdown、TXT、粘贴文本；导入前可描述要提取的内容（正文/题目/公式/单词）并校对。
+- 阅读：分块排版、点词查义与朗读、双语对照（英文 / 文言文 → 白话）、高亮与批注。
+- 理解：知识点拆解、思维导图、费曼自检。
+- 记忆：自测卡片、SM-2 间隔复习、词卡与学习统计。
+- AI：内置智能体（免下载免 Key）、浏览器内离线小模型、在线知识库、自填云端 Key，四种来源可切换并自动降级。
+- 本地优先：资料与进度存在 IndexedDB，不上传服务器；支持 JSON 导出/导入迁移。
+- 演示模式：`?demo=1` 自动补齐示例资料，适合答辩与离线演示。
 
-## 隐私
+## 技术架构
 
-所有资料、批注与卡片保存在浏览器 IndexedDB。文件解析、OCR、语音都在本机完成。
-仅当使用 AI 增强或在线翻译时才联网。
+纯静态站点，无后端、无构建产物依赖，浏览器直接运行原生 ES2020 脚本。
 
-## 本地运行
+```
+index.html            入口与脚本装配
+assets/js/            业务模块（IIFE 挂载到 window.ZY）
+  db.js               IndexedDB 封装
+  importer.js         解析、OCR、清洗、AI 校对
+  reader.js           阅读器、双语、批注
+  review.js           卡片与间隔复习
+  ai.js               AI Provider 与降级策略
+  app.js              路由与页面装配
+assets/vendor/        第三方库（pdf.js、mammoth、jszip）
+sw.js                 Service Worker（离线缓存）
+manifest.webmanifest  PWA 清单
+tests/                Vitest 单测（jsdom）
+scripts/verify.mjs    工程校验（语法、资源引用、manifest、SW 清单）
+docs/                 架构、测试、ADR 等文档
+```
+
+设计取舍见 [docs/adr/0001-static-first.md](docs/adr/0001-static-first.md)，详细说明见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+
+## 本地开发
+
+需要 Node.js 20+。
 
 ```bash
-python -m http.server 8000
+npm ci
+npm run dev        # http://127.0.0.1:8777
 ```
 
-然后打开 http://localhost:8000
+## 质量校验
 
-## 目录
-
-```
-index.html
-assets/
-  css/app.css
-  js/            # 各功能模块，按依赖顺序在 index.html 中加载
-  data/knowledge.js  # 内置知识点库
-  vendor/        # pdf.js、mammoth、jszip、tesseract（本地化，无外链）
+```bash
+npm run lint       # ESLint
+npm test           # Vitest 单元测试
+npm run verify     # JS 语法、资源引用、manifest 图标、SW 预缓存
+npm run check      # 以上全部
 ```
 
-## AI（可选）
+CI 在每次 push / PR 执行 `npm run check`（见 `.github/workflows/ci.yml`）。
 
-设置页有四种方式，默认是第一种：
+## 部署
 
-- **内置智能体（免下载、免 Key）**：由公共推理服务（llm7.io / GPT-OSS 20B，失败自动切换 Pollinations）提供，联网即可讲解、出题、翻译。点侧栏「AI 助手」或按 `A` 直接启用；失败自动退回在线知识库。
-- **在线知识库（免下载、免 Key）**：检索百度百科与萌娘百科，整理成定义、公式、条件、误区、变式、自测与来源链接。
-- **浏览器内模型**：Qwen2.5 0.5B / 1.5B，用 Transformers.js + WebGPU（不支持时回退 CPU）。首次加载需下载模型（约 480MB / 1.2GB），之后缓存在本机，可离线使用。
-- **云端接口**：DeepSeek / OpenAI / 任意 OpenAI 兼容接口，填入 Base URL、模型与 API Key。
+仓库根目录即发布目录，GitHub Pages 直接托管静态文件。发布前执行：
 
-不配置时，翻译走免费接口，其余功能完全离线可用。
+```bash
+npm run check
+```
 
-## 快捷键
+静态资源带 `?v=YYYYMMDD` 版本号，更新后同步修改 `index.html` 与 `sw.js` 的缓存版本。
 
-`U` 导入 · `A` 启用 AI 助手 · `Space` 翻卡 · `1–4` 评分 · `Esc` 退出专注模式
+## 目录规范
+
+- 业务代码只放在 `assets/js/`，第三方库放 `assets/vendor/`，不要混放。
+- 新增资源需同时加入 `sw.js` 预缓存清单，`npm run verify` 会校验。
+- 提交信息遵循 `feat: / fix: / docs: / test: / chore:`。
+- 详细协作方式见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
+## 路线图
+
+- [x] 单元测试与 CI
+- [x] PWA 可安装与离线缓存
+- [x] 演示模式与示例资料
+- [ ] 核心模块迁移为 ES Module + JSDoc 类型检查
+- [ ] Playwright 端到端测试（导入 → 阅读 → 复习）
+- [ ] 可选账号与多端同步（Supabase，保持离线优先）
