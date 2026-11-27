@@ -1410,6 +1410,21 @@ body.focus-mode .doc-head, body.focus-mode .doc-tabs { display: none; }
 .demo-bar button { border: 0; background: transparent; color: var(--ink-3); cursor: pointer; font-size: 12px; padding: 2px 4px; }
 .demo-bar button:hover { color: var(--ink); }
 
+/* 视觉打磨：字体渲染、层次与留白 */
+body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+.topbar { background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(12px) saturate(1.1); }
+.doc-card { border-radius: 12px; }
+.doc-card:hover { transform: translateY(-3px); }
+.doc-cover { transition: transform .35s var(--ease); }
+.doc-card:hover .doc-cover { transform: scale(1.04); }
+.doc-body { padding: 11px 12px 10px; }
+.doc-body h3 { font-size: 13px; }
+.doc-meta { margin-top: 6px; }
+.btn { border-radius: 9px; }
+.btn:focus-visible, .ghost-icon:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; }
+.paper { max-width: 780px; margin-inline: auto; line-height: 1.95; }
+.paper p { margin-bottom: 1.05em; }
+
 /* 打印：只保留正文 */
 @media print {
   .rail, .topbar, .reader-controls, .reader-side, .doc-tabs, .blk-tools, .tts-player, .selbar, .demo-bar { display: none !important; }
