@@ -5,6 +5,8 @@ import { browserRepo } from './core/repository.js';
 window.ZY.Repo = browserRepo();
 import { createAuth } from './core/auth.js';
 window.ZY.Auth = { create: createAuth };
+import { createSupabaseSync } from './core/sync.js';
+window.ZY.Sync = { create: createSupabaseSync };
 import '../assets/js/tts.js?v=20261025';
 import '../assets/js/localai.js?v=20261025';
 import '../assets/js/webkb.js?v=20261025';

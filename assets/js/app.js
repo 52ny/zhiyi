@@ -875,6 +875,7 @@
           <button class="btn primary small" id="auth-login">登录</button>
           <button class="btn ghost small" id="auth-send-code">发送验证码</button>
           <button class="btn ghost small" id="auth-verify-code">验证码登录</button>
+          <button class="btn ghost small" id="auth-sync">立即同步</button>
           <button class="btn ghost small danger" id="auth-logout">退出</button>
           <span class="set-status" id="auth-status">${authSession ? '已登录：' + Z.esc(authSession.user?.email || '') : '未登录'}</span>
         </div>
@@ -1033,14 +1034,26 @@
       return Z.Auth.create(cfg);
     };
     const authStatus = (t) => { const el = Z.$('#auth-status'); if (el) el.textContent = t; };
+    const syncNow = async (auth, cfgBase) => {
+      const session = auth.session();
+      if (!session || !session.user) throw new Error('请先登录');
+      const s = Z.Sync.create({ url: cfgBase.url, anonKey: cfgBase.key, token: session.accessToken });
+      const remote = await s.pull(session.user.id);
+      const merged = s.merge(await Z.DB.allDocs(), remote);
+      for (const d of merged) await Z.DB.putDoc(d);
+      await s.push(session.user.id, merged);
+      refresh();
+      return merged.length;
+    };
     const authRun = async (fn) => {
-      try { await fn(readSb()); Z.toast('操作成功', 'ok'); refresh(); }
+      try { const cfgBase = { url: Z.$('#sb-url').value.trim(), key: Z.$('#sb-key').value.trim() }; await fn(Z.Auth.create(cfgBase), cfgBase); Z.toast('操作成功', 'ok'); refresh(); }
       catch (e) { authStatus('失败：' + e.message); Z.toast(e.message, 'error', 4000); }
     };
     Z.$('#auth-signup')?.addEventListener('click', () => authRun(async (a) => { await a.signUp(Z.$('#auth-email').value.trim(), Z.$('#auth-pass').value); authStatus('注册成功，请查收确认邮件或直接登录'); }));
-    Z.$('#auth-login')?.addEventListener('click', () => authRun(async (a) => { const s = await a.signIn(Z.$('#auth-email').value.trim(), Z.$('#auth-pass').value); authStatus('已登录：' + (s.user?.email || '')); }));
+    Z.$('#auth-login')?.addEventListener('click', () => authRun(async (a, cfgBase) => { const s = await a.signIn(Z.$('#auth-email').value.trim(), Z.$('#auth-pass').value); authStatus('已登录：' + (s.user?.email || '')); await syncNow(a, cfgBase); authStatus('已登录并同步：' + (s.user?.email || '')); }));
     Z.$('#auth-send-code')?.addEventListener('click', () => authRun(async (a) => { await a.sendCode(Z.$('#auth-email').value.trim()); authStatus('验证码已发送，请查收邮箱'); }));
-    Z.$('#auth-verify-code')?.addEventListener('click', () => authRun(async (a) => { const s = await a.verifyCode(Z.$('#auth-email').value.trim(), Z.$('#auth-code').value.trim()); authStatus('已登录：' + (s.user?.email || '')); }));
+    Z.$('#auth-verify-code')?.addEventListener('click', () => authRun(async (a, cfgBase) => { const s = await a.verifyCode(Z.$('#auth-email').value.trim(), Z.$('#auth-code').value.trim()); authStatus('已登录：' + (s.user?.email || '')); await syncNow(a, cfgBase); authStatus('已登录并同步：' + (s.user?.email || '')); }));
+    Z.$('#auth-sync')?.addEventListener('click', () => authRun(async (a, cfgBase) => { const n = await syncNow(a, cfgBase); authStatus('同步完成，共 ' + n + ' 份资料'); }));
     Z.$('#auth-logout')?.addEventListener('click', () => { readSb().signOut(); authStatus('已退出'); refresh(); });
     Z.$('#data-file').addEventListener('change', async (e) => {
       const f = e.target.files[0];
