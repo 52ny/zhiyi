@@ -1,0 +1,18 @@
+/* 知忆 · 模块入口：按依赖顺序装配业务模块（渐进式 ESM 迁移的第一步） */
+import '../assets/js/util.js?v=20261025';
+import '../assets/js/db.js?v=20261025';
+import '../assets/js/tts.js?v=20261025';
+import '../assets/js/localai.js?v=20261025';
+import '../assets/js/webkb.js?v=20261025';
+import '../assets/js/ai.js?v=20261025';
+import '../assets/js/translate.js?v=20261025';
+import '../assets/js/importer.js?v=20261025';
+import '../assets/js/reader.js?v=20261025';
+import '../assets/js/mindmap.js?v=20261025';
+import '../assets/js/annotate.js?v=20261025';
+import '../assets/data/knowledge.js?v=20261025';
+import '../assets/js/lab.js?v=20261025';
+import '../assets/js/review.js?v=20261025';
+import '../assets/js/chat.js?v=20261025';
+import '../assets/js/demo.js?v=20261025';
+import '../assets/js/app.js?v=20261025';

@@ -19,7 +19,8 @@
 纯静态站点，无后端、无构建产物依赖，浏览器直接运行原生 ES2020 脚本。
 
 ```
-index.html            入口与脚本装配
+index.html            入口；第三方 UMD + 单一 ESM 入口
+src/main.js           模块入口，按依赖顺序装配 assets/js
 assets/js/            业务模块（IIFE 挂载到 window.ZY）
   db.js               IndexedDB 封装
   importer.js         解析、OCR、清洗、AI 校对
@@ -76,6 +77,7 @@ npm run check
 
 ## 路线图
 
+- [x] 单一 ESM 入口装配（src/main.js）
 - [x] 单元测试与 CI
 - [x] PWA 可安装与离线缓存
 - [x] 演示模式与示例资料
