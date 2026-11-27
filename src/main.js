@@ -3,6 +3,8 @@ import '../assets/js/util.js?v=20261025';
 import '../assets/js/db.js?v=20261025';
 import { browserRepo } from './core/repository.js';
 window.ZY.Repo = browserRepo();
+import { createAuth } from './core/auth.js';
+window.ZY.Auth = { create: createAuth };
 import '../assets/js/tts.js?v=20261025';
 import '../assets/js/localai.js?v=20261025';
 import '../assets/js/webkb.js?v=20261025';

@@ -746,6 +746,8 @@
     const zhVoices = voices.filter((v) => (v.lang || '').toLowerCase().startsWith('zh'));
     const enVoices = voices.filter((v) => (v.lang || '').toLowerCase().startsWith('en'));
     const demoMode = Z.store.get('demoMode', false);
+    const sb = Z.store.get('supabase', {});
+    const authSession = Z.Auth ? Z.Auth.create(sb).session() : null;
 
     view.innerHTML = `<div class="settings">
       <div class="settings-head"><span class="eyebrow">SETTINGS</span><h1>设置</h1></div>
@@ -857,6 +859,25 @@
           </label>
         </div>
         <div class="set-actions"><span class="set-status">${ai.apiKey ? '优先使用 AI 翻译' : '使用免费翻译 + 本地缓存'}</span></div>
+      </section>
+
+      <section class="set-card">
+        <div class="set-title"><span class="set-ico">${Z.icon('key')}</span><div><h3>账号与同步（可选）</h3><p>邮箱密码或验证码登录；未配置时保持纯本地。</p></div></div>
+        <div class="set-grid">
+          <label>Supabase URL<input class="input" id="sb-url" value="${Z.esc(sb.url || '')}" placeholder="https://xxx.supabase.co"></label>
+          <label>anon key<input class="input" id="sb-key" type="password" value="${Z.esc(sb.key || '')}" placeholder="eyJ..."></label>
+          <label>邮箱<input class="input" id="auth-email" placeholder="you@example.com"></label>
+          <label>密码<input class="input" id="auth-pass" type="password" placeholder="至少 6 位"></label>
+          <label>验证码<input class="input" id="auth-code" placeholder="邮箱收到的 6 位数字"></label>
+        </div>
+        <div class="set-actions">
+          <button class="btn ghost small" id="auth-signup">注册</button>
+          <button class="btn primary small" id="auth-login">登录</button>
+          <button class="btn ghost small" id="auth-send-code">发送验证码</button>
+          <button class="btn ghost small" id="auth-verify-code">验证码登录</button>
+          <button class="btn ghost small danger" id="auth-logout">退出</button>
+          <span class="set-status" id="auth-status">${authSession ? '已登录：' + Z.esc(authSession.user?.email || '') : '未登录'}</span>
+        </div>
       </section>
 
       <section class="set-card">
@@ -1005,6 +1026,22 @@
     });
     Z.$('#data-import-btn').addEventListener('click', () => Z.$('#data-file').click());
     Z.$('#demo-toggle')?.addEventListener('change', (e) => setDemoMode(e.target.checked));
+    // 账号：配置 Supabase 后可注册/密码登录/邮箱验证码登录
+    const readSb = () => {
+      const cfg = { url: Z.$('#sb-url').value.trim(), key: Z.$('#sb-key').value.trim() };
+      Z.store.set('supabase', cfg);
+      return Z.Auth.create(cfg);
+    };
+    const authStatus = (t) => { const el = Z.$('#auth-status'); if (el) el.textContent = t; };
+    const authRun = async (fn) => {
+      try { await fn(readSb()); Z.toast('操作成功', 'ok'); refresh(); }
+      catch (e) { authStatus('失败：' + e.message); Z.toast(e.message, 'error', 4000); }
+    };
+    Z.$('#auth-signup')?.addEventListener('click', () => authRun(async (a) => { await a.signUp(Z.$('#auth-email').value.trim(), Z.$('#auth-pass').value); authStatus('注册成功，请查收确认邮件或直接登录'); }));
+    Z.$('#auth-login')?.addEventListener('click', () => authRun(async (a) => { const s = await a.signIn(Z.$('#auth-email').value.trim(), Z.$('#auth-pass').value); authStatus('已登录：' + (s.user?.email || '')); }));
+    Z.$('#auth-send-code')?.addEventListener('click', () => authRun(async (a) => { await a.sendCode(Z.$('#auth-email').value.trim()); authStatus('验证码已发送，请查收邮箱'); }));
+    Z.$('#auth-verify-code')?.addEventListener('click', () => authRun(async (a) => { const s = await a.verifyCode(Z.$('#auth-email').value.trim(), Z.$('#auth-code').value.trim()); authStatus('已登录：' + (s.user?.email || '')); }));
+    Z.$('#auth-logout')?.addEventListener('click', () => { readSb().signOut(); authStatus('已退出'); refresh(); });
     Z.$('#data-file').addEventListener('change', async (e) => {
       const f = e.target.files[0];
       if (!f) return;
