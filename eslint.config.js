@@ -6,7 +6,7 @@ export default [
     files: ['assets/js/**/*.js', 'sw.js'],
     languageOptions: {
       ecmaVersion: 2022,
-      sourceType: 'script',
+      sourceType: 'module',
       globals: {
         ...globals.browser,
         ...globals.serviceworker,

@@ -14,7 +14,9 @@ export function loadZ(files) {
   dom.window.mammoth = {};
   dom.window.JSZip = function JSZip() {};
   for (const f of files) {
-    dom.window.eval(readFileSync(resolve(process.cwd(), f), 'utf8'));
+    // 兼容脚本内新增的 ESM export 行（jsdom 以脚本方式加载）
+    const code = readFileSync(resolve(process.cwd(), f), 'utf8').replace(/^export\s+.*$/gm, '');
+    dom.window.eval(code);
   }
   return dom.window.ZY;
 }

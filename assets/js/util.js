@@ -290,3 +290,9 @@ window.ZY = window.ZY || {};
 
   document.addEventListener('DOMContentLoaded', Z.attachAutoIcons);
 })(window.ZY);
+
+// ESM 出口（渐进迁移）：保留 window.ZY 兼容层，供模块与测试直接引用
+export const langOf = window.ZY.langOf;
+export const isClassical = window.ZY.isClassical;
+export const uid = window.ZY.uid;
+export const esc = window.ZY.esc;
