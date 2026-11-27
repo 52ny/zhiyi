@@ -14,7 +14,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "verify": "node scripts/verify.mjs",
-    "check": "npm run lint && npm test && npm run verify"
+    "typecheck": "tsc --noEmit",
+    "check": "npm run lint && npm run typecheck && npm test && npm run verify"
   },
   "devDependencies": {
     "eslint": "^9.39.5",
@@ -22,6 +23,7 @@
     "http-server": "^14.1.1",
     "jsdom": "^25.0.1",
     "prettier": "^3.10.1",
+    "typescript": "^7.0.2",
     "vitest": "^4.1.12"
   }
 }
