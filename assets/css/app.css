@@ -1435,13 +1435,19 @@ body {
   background-attachment: fixed;
 }
 [data-theme="dark"] body {
+  background-color: #060917;
   background-image:
-    radial-gradient(60% 50% at 15% 0%, rgba(96, 116, 255, .55), transparent 70%),
-    radial-gradient(50% 45% at 90% 6%, rgba(150, 110, 255, .45), transparent 70%),
-    radial-gradient(50% 45% at 55% 100%, rgba(60, 180, 255, .32), transparent 72%),
-    radial-gradient(rgba(255,255,255,.9) 1px, transparent 1.5px),
-    linear-gradient(180deg, #0a0e24 0%, #0c1028 55%, #090c1c 100%);
-  background-size: auto, auto, auto, 130px 130px, auto;
+    radial-gradient(55% 45% at 15% -5%, rgba(86, 104, 255, .6), transparent 62%),
+    radial-gradient(48% 42% at 88% 4%, rgba(168, 84, 255, .5), transparent 66%),
+    radial-gradient(50% 45% at 78% 88%, rgba(36, 168, 214, .4), transparent 68%),
+    radial-gradient(38% 32% at 26% 72%, rgba(255, 110, 190, .22), transparent 70%),
+    linear-gradient(118deg, transparent 30%, rgba(96, 120, 255, .12) 46%, rgba(160, 90, 255, .1) 54%, transparent 70%),
+    radial-gradient(1.4px 1.4px at 24% 28%, rgba(255,255,255,.95), transparent),
+    radial-gradient(1px 1px at 72% 62%, rgba(255,255,255,.8), transparent),
+    radial-gradient(1.6px 1.6px at 48% 82%, rgba(210,225,255,.9), transparent),
+    radial-gradient(1px 1px at 12% 68%, rgba(255,255,255,.65), transparent),
+    linear-gradient(180deg, #070a18 0%, #0a1026 42%, #080b1a 74%, #05070f 100%);
+  background-size: auto, auto, auto, auto, auto, 190px 190px, 140px 140px, 230px 230px, 110px 110px, auto;
   background-attachment: fixed;
 }
 .doc-card, .set-card {
