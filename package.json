@@ -15,9 +15,11 @@
     "format:check": "prettier --check .",
     "verify": "node scripts/verify.mjs",
     "typecheck": "tsc --noEmit",
-    "check": "npm run lint && npm run typecheck && npm test && npm run verify"
+    "check": "npm run lint && npm run typecheck && npm test && npm run verify",
+    "e2e": "playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.1",
     "eslint": "^9.39.5",
     "globals": "^17.14.0",
     "http-server": "^14.1.1",
