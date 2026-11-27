@@ -51,10 +51,12 @@
 
   /** 侧栏登录入口：显示当前账号或“登录 / 注册” */
   function updateAuthEntry() {
-    const lbl = Z.$('#rail-auth-label');
-    if (!lbl || !Z.Auth) return;
-    const s = Z.Auth.create(Z.store.get('supabase', {})).session();
-    lbl.textContent = s && s.user ? (s.user.email || '').split('@')[0] : '登录 / 注册';
+    const s = Z.Auth ? Z.Auth.create(Z.store.get('supabase', {})).session() : null;
+    const text = s && s.user ? (s.user.email || '').split('@')[0] : '登录 / 注册';
+    const rail = Z.$('#rail-auth-label');
+    if (rail) rail.textContent = text;
+    const top = Z.$('#top-auth');
+    if (top) top.textContent = text;
   }
 
   /** 演示模式：补齐示例资料 + 顶部提示，答辩/离线演示用 */
@@ -1148,14 +1150,16 @@
     });
 
     window.addEventListener('hashchange', route);
-    Z.$('#rail-auth')?.addEventListener('click', () => {
+    const goAuth = () => {
       location.hash = '#/settings';
       setTimeout(() => {
         const el = Z.$('#auth-email');
         el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
         el?.focus();
       }, 100);
-    });
+    };
+    Z.$('#rail-auth')?.addEventListener('click', goAuth);
+    Z.$('#top-auth')?.addEventListener('click', goAuth);
   }
 
   async function init() {
