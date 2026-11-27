@@ -41,6 +41,7 @@ export function createAuth(opts = {}) {
     signUp: (email, password) => call('/auth/v1/signup', { email, password }),
     signIn: async (email, password) => saveSession(await call('/auth/v1/token?grant_type=password', { email, password })),
     sendCode: (email) => call('/auth/v1/otp', { email, create_user: true }),
+    resetPassword: (email) => call('/auth/v1/recover', { email }),
     verifyCode: async (email, token) => saveSession(await call('/auth/v1/verify', { type: 'email', email, token })),
     session() {
       try { return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); } catch (e) { return null; }

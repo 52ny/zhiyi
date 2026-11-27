@@ -1497,8 +1497,20 @@ body {
 .auth-card h1 { font-family: var(--font-serif); font-size: 26px; margin: 6px 0 4px; }
 .auth-card .auth-sub { font-size: 12.5px; color: var(--ink-3); margin-bottom: 18px; }
 .auth-card label { display: block; font-size: 11.5px; color: var(--ink-3); margin-bottom: 12px; }
-.auth-card .input { width: 100%; margin-top: 5px; border-radius: 10px; background: rgba(255,255,255,.65); }
-[data-theme="dark"] .auth-card .input { background: rgba(255,255,255,.06); }
+.auth-card .input {
+  width: 100%; margin-top: 6px; height: 44px; padding: 0 14px;
+  border-radius: 12px; border: 1px solid rgba(90, 120, 100, .28);
+  background: rgba(255,255,255,.72); color: var(--ink);
+  font-size: 13.5px; transition: border-color .18s, box-shadow .18s, background .18s;
+}
+.auth-card .input::placeholder { color: color-mix(in srgb, var(--ink-3) 75%, transparent); }
+.auth-card .input:focus {
+  outline: none; border-color: #6f8f7a;
+  box-shadow: 0 0 0 3px rgba(111, 143, 122, .18);
+  background: #fff;
+}
+[data-theme="dark"] .auth-card .input { background: rgba(255,255,255,.07); border-color: rgba(160, 200, 180, .22); }
+[data-theme="dark"] .auth-card .input:focus { background: rgba(255,255,255,.1); box-shadow: 0 0 0 3px rgba(111, 143, 122, .25); }
 .auth-card .btn.sage { width: 100%; margin-top: 6px; background: #6f8f7a; color: #fff; border-color: transparent; }
 .auth-card .btn.sage:hover { background: #5f7f6b; }
 .auth-links { display: flex; justify-content: space-between; margin-top: 14px; font-size: 11.5px; }

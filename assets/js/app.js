@@ -790,8 +790,12 @@
       <label>验证码（可选）<input class="input" id="auth-code" placeholder="邮箱收到的 6 位数字"></label>
       <button class="btn sage" id="auth-login">登录</button>
       <div class="auth-links">
-        <button id="auth-signup">没有账号？注册</button>
-        <button id="auth-send-code">验证码登录</button>
+        <button id="auth-signup">注册账号</button>
+        <button id="auth-forgot">忘记密码？</button>
+      </div>
+      <div class="auth-links">
+        <button id="auth-send-code">用验证码登录</button>
+        <button id="auth-code-verify">验证码已收到</button>
       </div>
       <div class="set-status" id="auth-status">${sess && sess.user ? '已登录' : '未登录'}</div>
       ${sess && sess.user ? '<button class="btn ghost small" id="auth-logout" style="width:100%;margin-top:10px">退出登录</button>' : ''}
@@ -803,9 +807,21 @@
       catch (e) { status('失败：' + e.message); Z.toast(e.message, 'error', 4000); }
     };
     Z.$('#auth-login')?.addEventListener('click', () => run(async (a) => { const s = await a.signIn(Z.$('#auth-email').value.trim(), Z.$('#auth-pass').value); status('已登录：' + (s.user?.email || '')); location.hash = '#/home'; }));
-    Z.$('#auth-signup')?.addEventListener('click', () => run(async (a) => { await a.signUp(Z.$('#auth-email').value.trim(), Z.$('#auth-pass').value); status('注册成功，请查收确认邮件'); }));
+    Z.$('#auth-signup')?.addEventListener('click', () => run(async (a) => {
+      const email = Z.$('#auth-email').value.trim();
+      const pass = Z.$('#auth-pass').value;
+      if (pass.length < 6) throw new Error('密码至少 6 位');
+      await a.signUp(email, pass);
+      status('注册成功，请查收确认邮件');
+    }));
+    Z.$('#auth-forgot')?.addEventListener('click', () => run(async (a) => {
+      const email = Z.$('#auth-email').value.trim();
+      if (!email) throw new Error('请先填写邮箱');
+      await a.resetPassword(email);
+      status('重置邮件已发送，请查收邮箱');
+    }));
     Z.$('#auth-send-code')?.addEventListener('click', () => run(async (a) => { await a.sendCode(Z.$('#auth-email').value.trim()); status('验证码已发送，请查收邮箱'); }));
-    Z.$('#auth-code')?.addEventListener('change', () => run(async (a) => { const s = await a.verifyCode(Z.$('#auth-email').value.trim(), Z.$('#auth-code').value.trim()); status('已登录：' + (s.user?.email || '')); location.hash = '#/home'; }));
+    Z.$('#auth-code-verify')?.addEventListener('click', () => run(async (a) => { const s = await a.verifyCode(Z.$('#auth-email').value.trim(), Z.$('#auth-code').value.trim()); status('已登录：' + (s.user?.email || '')); location.hash = '#/home'; }));
     Z.$('#auth-logout')?.addEventListener('click', () => { Z.Auth.create(cfg()).signOut(); updateAuthEntry(); renderAuth(view); });
   }
 
