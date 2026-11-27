@@ -393,18 +393,18 @@ input[type="range"] { accent-color: var(--accent); height: 22px; }
 }
 .doc-card:hover, .doc-card:focus-visible { transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: color-mix(in srgb, var(--accent) 20%, var(--line)); }
 .doc-cover {
-  position: relative; height: 76px;
+  position: relative; height: 56px;
   background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 9%, var(--surface)), color-mix(in srgb, var(--accent) 3%, var(--surface-2)));
   background-size: cover; background-position: center;
   border-bottom: 1px solid var(--line-soft);
   display: grid; place-items: center;
 }
 .doc-cover.has-img::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 40%, rgba(15, 40, 34, .34)); }
-.cover-glyph { font-family: var(--font-serif); font-size: 32px; color: color-mix(in srgb, var(--accent) 55%, transparent); }
+.cover-glyph { font-family: var(--font-serif); font-size: 24px; color: color-mix(in srgb, var(--accent) 55%, transparent); }
 .type-badge {
-  position: absolute; left: 10px; top: 10px; z-index: 2;
-  padding: 3px 8px; border-radius: 6px;
-  font-size: 10.5px; font-weight: 650; letter-spacing: .02em;
+  position: absolute; left: 8px; top: 7px; z-index: 2;
+  padding: 2px 6px; border-radius: 5px;
+  font-size: 9.5px; font-weight: 650; letter-spacing: .02em;
   background: color-mix(in srgb, var(--surface) 88%, transparent);
   color: var(--accent); backdrop-filter: blur(6px);
   border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
