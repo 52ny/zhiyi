@@ -1,5 +1,5 @@
 /* 知忆 · Service Worker：静态资源缓存优先，页面导航网络优先 */
-const CACHE = 'zhiyi-v3';
+const CACHE = 'zhiyi-v4';
 const CORE = [
   './',
   './index.html',

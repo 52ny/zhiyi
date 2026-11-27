@@ -49,6 +49,14 @@
   function setTheme(t) { Z.store.set('theme', t); applyTheme(); }
   function setPalette(p) { Z.store.set('palette', p); applyTheme(); }
 
+  /** 侧栏登录入口：显示当前账号或“登录 / 注册” */
+  function updateAuthEntry() {
+    const lbl = Z.$('#rail-auth-label');
+    if (!lbl || !Z.Auth) return;
+    const s = Z.Auth.create(Z.store.get('supabase', {})).session();
+    lbl.textContent = s && s.user ? (s.user.email || '').split('@')[0] : '登录 / 注册';
+  }
+
   /** 演示模式：补齐示例资料 + 顶部提示，答辩/离线演示用 */
   async function setDemoMode(on) {
     Z.store.set('demoMode', !!on);
@@ -864,8 +872,8 @@
       <section class="set-card">
         <div class="set-title"><span class="set-ico">${Z.icon('key')}</span><div><h3>账号与同步（可选）</h3><p>邮箱密码或验证码登录；未配置时保持纯本地。</p></div></div>
         <div class="set-grid">
-          <label>Supabase URL<input class="input" id="sb-url" value="${Z.esc(sb.url || '')}" placeholder="https://xxx.supabase.co"></label>
-          <label>anon key<input class="input" id="sb-key" type="password" value="${Z.esc(sb.key || '')}" placeholder="eyJ..."></label>
+          <label>项目 URL<input class="input" id="sb-url" value="${Z.esc(sb.url || '')}" placeholder="https://xxx.supabase.co"></label>
+          <label>项目密钥（anon key）<input class="input" id="sb-key" type="password" value="${Z.esc(sb.key || '')}" placeholder="eyJhbGciOi..."></label>
           <label>邮箱<input class="input" id="auth-email" placeholder="you@example.com"></label>
           <label>密码<input class="input" id="auth-pass" type="password" placeholder="至少 6 位"></label>
           <label>验证码<input class="input" id="auth-code" placeholder="邮箱收到的 6 位数字"></label>
@@ -1046,7 +1054,7 @@
       return merged.length;
     };
     const authRun = async (fn) => {
-      try { const cfgBase = { url: Z.$('#sb-url').value.trim(), key: Z.$('#sb-key').value.trim() }; await fn(Z.Auth.create(cfgBase), cfgBase); Z.toast('操作成功', 'ok'); refresh(); }
+      try { const cfgBase = { url: Z.$('#sb-url').value.trim(), key: Z.$('#sb-key').value.trim() }; await fn(Z.Auth.create(cfgBase), cfgBase); Z.toast('操作成功', 'ok'); updateAuthEntry(); refresh(); }
       catch (e) { authStatus('失败：' + e.message); Z.toast(e.message, 'error', 4000); }
     };
     Z.$('#auth-signup')?.addEventListener('click', () => authRun(async (a) => { await a.signUp(Z.$('#auth-email').value.trim(), Z.$('#auth-pass').value); authStatus('注册成功，请查收确认邮件或直接登录'); }));
@@ -1054,7 +1062,7 @@
     Z.$('#auth-send-code')?.addEventListener('click', () => authRun(async (a) => { await a.sendCode(Z.$('#auth-email').value.trim()); authStatus('验证码已发送，请查收邮箱'); }));
     Z.$('#auth-verify-code')?.addEventListener('click', () => authRun(async (a, cfgBase) => { const s = await a.verifyCode(Z.$('#auth-email').value.trim(), Z.$('#auth-code').value.trim()); authStatus('已登录：' + (s.user?.email || '')); await syncNow(a, cfgBase); authStatus('已登录并同步：' + (s.user?.email || '')); }));
     Z.$('#auth-sync')?.addEventListener('click', () => authRun(async (a, cfgBase) => { const n = await syncNow(a, cfgBase); authStatus('同步完成，共 ' + n + ' 份资料'); }));
-    Z.$('#auth-logout')?.addEventListener('click', () => { readSb().signOut(); authStatus('已退出'); refresh(); });
+    Z.$('#auth-logout')?.addEventListener('click', () => { readSb().signOut(); authStatus('已退出'); updateAuthEntry(); refresh(); });
     Z.$('#data-file').addEventListener('change', async (e) => {
       const f = e.target.files[0];
       if (!f) return;
@@ -1140,6 +1148,14 @@
     });
 
     window.addEventListener('hashchange', route);
+    Z.$('#rail-auth')?.addEventListener('click', () => {
+      location.hash = '#/settings';
+      setTimeout(() => {
+        const el = Z.$('#auth-email');
+        el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        el?.focus();
+      }, 100);
+    });
   }
 
   async function init() {
@@ -1160,6 +1176,7 @@
     bindGlobal();
     Z.LocalAI.subscribe(updateAiUI);
     updateAiUI();
+    updateAuthEntry();
     await Z.Demo.seed();
     if (Z.store.get('demoMode', false)) {
       document.body.classList.add('demo-mode');
