@@ -128,6 +128,10 @@
   }
 
   async function chat(messages, opts = {}) {
+    // 测试/扩展注入点：优先使用外部 Provider
+    if (Z.AI.__provider && typeof Z.AI.__provider.chat === 'function') {
+      return Z.AI.__provider.chat(messages, opts);
+    }
     const c = cfg();
     // 用户选的是在线知识库/未加载的本地模型时，自动切回内置智能体，避免“不可用”
     if ((isOnline() || (isLocal() && !isReady())) && opts.autoAgent !== false) {
@@ -311,6 +315,7 @@ ${text.slice(0, 5000)}
 
   Z.AI = {
     PRESETS, cfg, save, isReady, isChat, isAgent, isLocal, isOnline, ensureAgent, chat, test, translate, explain, feynman, mindmap, cards, parseJSON,
+    useProvider(p) { Z.AI.__provider = p; },
     label() {
       const c = cfg();
       if (c.provider === 'agent') return '内置智能体 · GPT-OSS 20B';
