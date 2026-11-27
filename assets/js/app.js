@@ -304,6 +304,7 @@
           <div class="hero-chips">
             <span>双语对照</span><span>点词朗读</span><span>思维导图</span><span>手绘批注</span><span>主动回忆</span><span>间隔复习</span>
           </div>
+          <div class="skin-row"><span>皮肤</span><button data-skin="nebula">星云</button><button data-skin="forest">森林</button><button data-skin="paper">纸墨</button></div>
         </div>
         <div class="hero-ring">
           <div class="ring-wrap">
@@ -325,6 +326,33 @@
         <div class="stat"><strong>${s.cards}</strong><span>张卡片</span></div>
         <div class="stat"><strong>${s.mastered}</strong><span>已掌握</span></div>
         <div class="stat"><strong>${s.streak}</strong><span>连续复习天数</span></div>
+      </section>
+
+      <section class="study-space">
+        <div class="ss-card">
+          <h3>今天感觉怎么样？</h3>
+          <div class="mood-row">${['平静', '放松', '专注', '焦虑'].map((m, i) => `<button data-mood="${i}">${m}</button>`).join('')}</div>
+          <p class="muted small" id="mood-note">记录心情，帮助调整学习节奏</p>
+        </div>
+        <div class="ss-card">
+          <h3>专注计时</h3>
+          <strong id="focus-time">25:00</strong>
+          <div class="ss-actions"><button class="btn ghost small" data-focus="start">开始</button><button class="btn ghost small" data-focus="stop">停止</button></div>
+        </div>
+        <div class="ss-card">
+          <h3>成就</h3>
+          <div class="badge-row">${[
+            { on: s.streak >= 3, label: '连续 3 天' },
+            { on: s.mastered >= 10, label: '掌握 10 张' },
+            { on: docs.length >= 3, label: '三份资料' },
+            { on: s.cards >= 20, label: '20 张卡片' }
+          ].map((b) => `<span class="badge ${b.on ? 'on' : ''}">${b.on ? '★' : '☆'} ${b.label}</span>`).join('')}</div>
+        </div>
+        <div class="ss-card">
+          <h3>分享卡片</h3>
+          <p class="muted small">把资料标题与要点生成图片。</p>
+          <button class="btn ghost small" data-share>生成图片</button>
+        </div>
       </section>
 
       <section class="library-head">
@@ -1134,6 +1162,65 @@
 
   /* ================= 全局事件 ================= */
   function bindGlobal() {
+    let focusTimer = null;
+    document.addEventListener('click', (e) => {
+      const mood = e.target.closest('[data-mood]');
+      if (mood) {
+        const labels = ['平静', '放松', '专注', '焦虑'];
+        const d = new Date().toISOString().slice(0, 10);
+        Z.store.set('mood.log', Object.assign(Z.store.get('mood.log', {}), { [d]: labels[+mood.dataset.mood] }));
+        const note = Z.$('#mood-note');
+        if (note) note.textContent = '今天：' + labels[+mood.dataset.mood];
+        Z.toast('已记录今天的心情', 'ok');
+        return;
+      }
+      const skin = e.target.closest('[data-skin]');
+      if (skin) {
+        Z.store.set('skin', skin.dataset.skin);
+        document.documentElement.dataset.skin = skin.dataset.skin;
+        Z.toast('已切换皮肤', 'ok');
+        return;
+      }
+      const focus = e.target.closest('[data-focus]');
+      if (focus) {
+        const el = Z.$('#focus-time');
+        if (focus.dataset.focus === 'stop') { clearInterval(focusTimer); focusTimer = null; if (el) el.textContent = '25:00'; return; }
+        if (focusTimer) return;
+        let left = 25 * 60;
+        if (el) el.textContent = '25:00';
+        focusTimer = setInterval(() => {
+          left--;
+          if (el) el.textContent = String(Math.floor(left / 60)).padStart(2, '0') + ':' + String(left % 60).padStart(2, '0');
+          if (left <= 0) { clearInterval(focusTimer); focusTimer = null; Z.toast('专注完成，休息一下', 'ok', 5000); }
+        }, 1000);
+        Z.toast('开始 25 分钟专注', 'ok');
+        return;
+      }
+      if (e.target.closest('[data-share]')) {
+        const d = docs[0];
+        if (!d) { Z.toast('先导入一份资料', 'error'); return; }
+        const c = document.createElement('canvas');
+        c.width = 900; c.height = 1200;
+        const g = c.getContext('2d');
+        const grd = g.createLinearGradient(0, 0, 900, 1200);
+        grd.addColorStop(0, '#1a1f4a'); grd.addColorStop(1, '#5b4b8a');
+        g.fillStyle = grd; g.fillRect(0, 0, 900, 1200);
+        g.fillStyle = '#fff'; g.font = 'bold 52px serif';
+        g.fillText((d.title || '知忆学习卡片').slice(0, 18), 60, 130);
+        g.font = '26px sans-serif'; g.fillStyle = 'rgba(255,255,255,.85)';
+        (d.blocks || []).filter((b) => b.t === 'p').slice(0, 6).forEach((b, i) => {
+          const line = b.text.slice(0, 30);
+          g.fillText(line, 60, 220 + i * 120);
+        });
+        g.fillStyle = 'rgba(255,255,255,.6)'; g.font = '22px sans-serif';
+        g.fillText('知忆 ZHIYI · 把资料变成记得住的知识', 60, 1120);
+        const a = document.createElement('a');
+        a.href = c.toDataURL('image/png');
+        a.download = 'zhiyi-card.png';
+        a.click();
+        Z.toast('已生成分享图片', 'ok');
+      }
+    });
     Z.$('#rail-import')?.addEventListener('click', openImport);
     Z.$('#theme-toggle')?.addEventListener('click', () => {
       const cur = document.documentElement.dataset.theme === 'dark' ? 'paper' : 'dark';
@@ -1193,6 +1280,7 @@
 
   async function init() {
     applyTheme();
+    document.documentElement.dataset.skin = Z.store.get('skin', 'nebula');
     // 默认进入文库，避免残留 #/auth 让用户以为网站只有登录页
     if (!location.hash || location.hash === '#/' || location.hash === '#') {
       history.replaceState(null, '', '#/home');
