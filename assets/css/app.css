@@ -1536,6 +1536,49 @@ body {
 }
 [data-skin="paper"] body { background-image: none; background-color: var(--bg); }
 
+/* 卡片与侧栏彩色渲染 */
+.rail {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent) 12%, var(--surface)) 0%, color-mix(in srgb, var(--accent) 4%, var(--surface)) 42%, var(--surface) 100%);
+  border-right: 1px solid color-mix(in srgb, var(--accent) 16%, var(--line-soft));
+}
+[data-theme="dark"] .rail {
+  background: linear-gradient(180deg, #131c46 0%, #0d1430 48%, #0a0f22 100%);
+  border-right-color: rgba(140, 160, 255, .16);
+}
+.nav-item.on {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 20%, transparent), transparent 85%);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+[data-theme="dark"] .nav-item.on { background: linear-gradient(90deg, rgba(120, 140, 255, .26), transparent 85%); }
+.doc-card {
+  background:
+    linear-gradient(155deg, color-mix(in srgb, var(--accent) 7%, var(--surface)) 0%, var(--surface) 45%, color-mix(in srgb, #7c8cf8 5%, var(--surface)) 100%);
+  border-top: 3px solid color-mix(in srgb, var(--accent) 58%, transparent);
+  box-shadow: 0 1px 0 rgba(255,255,255,.6) inset, 0 10px 26px color-mix(in srgb, var(--accent) 9%, transparent);
+}
+[data-theme="dark"] .doc-card {
+  background: linear-gradient(155deg, rgba(54, 66, 130, .55), rgba(20, 26, 54, .72) 55%, rgba(38, 30, 80, .6));
+  border-top-color: rgba(140, 160, 255, .55);
+  box-shadow: 0 12px 30px rgba(2, 6, 23, .5);
+}
+.doc-card:hover { box-shadow: 0 14px 34px color-mix(in srgb, var(--accent) 20%, transparent); }
+.doc-cover {
+  background:
+    radial-gradient(120% 120% at 15% 0%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 60%),
+    linear-gradient(135deg, color-mix(in srgb, #7c8cf8 16%, var(--surface)), color-mix(in srgb, #4fb6c9 12%, var(--surface-2)));
+}
+[data-theme="dark"] .doc-cover {
+  background:
+    radial-gradient(120% 120% at 15% 0%, rgba(124, 140, 248, .4), transparent 60%),
+    linear-gradient(135deg, rgba(60, 76, 160, .55), rgba(30, 40, 90, .6));
+}
+.set-card {
+  background: linear-gradient(165deg, color-mix(in srgb, var(--accent) 5%, var(--surface)), var(--surface) 55%);
+}
+[data-theme="dark"] .set-card { background: linear-gradient(165deg, rgba(40, 50, 100, .6), rgba(18, 24, 48, .7)); }
+.ss-card { background: linear-gradient(160deg, color-mix(in srgb, var(--accent) 8%, var(--surface)), var(--surface) 60%); }
+
 /* 打印：只保留正文 */
 @media print {
   .rail, .topbar, .reader-controls, .reader-side, .doc-tabs, .blk-tools, .tts-player, .selbar, .demo-bar { display: none !important; }
