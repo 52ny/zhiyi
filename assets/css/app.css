@@ -384,7 +384,7 @@ input[type="range"] { accent-color: var(--accent); height: 22px; }
 .library-head h2 { font-family: var(--font-serif); font-size: 20px; font-weight: 600; }
 .lib-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
-.doc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); gap: 16px; }
+.doc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(198px, 1fr)); gap: 12px; }
 .doc-card {
   border: 1px solid var(--line-soft); border-radius: var(--radius);
   background: var(--surface); overflow: hidden; cursor: pointer;
@@ -393,14 +393,14 @@ input[type="range"] { accent-color: var(--accent); height: 22px; }
 }
 .doc-card:hover, .doc-card:focus-visible { transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: color-mix(in srgb, var(--accent) 20%, var(--line)); }
 .doc-cover {
-  position: relative; height: 104px;
+  position: relative; height: 76px;
   background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 9%, var(--surface)), color-mix(in srgb, var(--accent) 3%, var(--surface-2)));
   background-size: cover; background-position: center;
   border-bottom: 1px solid var(--line-soft);
   display: grid; place-items: center;
 }
 .doc-cover.has-img::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 40%, rgba(15, 40, 34, .34)); }
-.cover-glyph { font-family: var(--font-serif); font-size: 44px; color: color-mix(in srgb, var(--accent) 55%, transparent); }
+.cover-glyph { font-family: var(--font-serif); font-size: 32px; color: color-mix(in srgb, var(--accent) 55%, transparent); }
 .type-badge {
   position: absolute; left: 10px; top: 10px; z-index: 2;
   padding: 3px 8px; border-radius: 6px;
