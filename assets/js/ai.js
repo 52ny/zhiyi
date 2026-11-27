@@ -324,3 +324,6 @@ ${text.slice(0, 5000)}
     }
   };
 })(window.ZY);
+
+// ESM 出口（渐进迁移）
+export const AI = window.ZY.AI;

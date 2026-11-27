@@ -136,3 +136,6 @@
     }
   };
 })(window.ZY);
+
+// ESM 出口（渐进迁移）
+export const DB = window.ZY.DB;

@@ -770,3 +770,6 @@
     cleanBlocks, blocksFromPlainText, fromEdited, aiRefine, aiFixOcr, fixClassicOcr, intentOf
   };
 })(window.ZY);
+
+// ESM 出口（渐进迁移）
+export const Import = window.ZY.Import;
