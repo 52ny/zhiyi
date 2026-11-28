@@ -265,6 +265,7 @@
       renderDoc(view, doc, r);
       return;
     }
+    if (r.name === 'map') { navTo('map'); setCrumb('<span>功能地图</span>'); setTopActions(''); renderMap(view); return; }
     if (r.name === 'review') { navTo('review'); renderReview(view); return; }
     if (r.name === 'lab') { navTo('lab'); setCrumb('<span>知识工坊</span>'); setTopActions(''); Z.Lab.mount(view); return; }
     if (r.name === 'chat') { navTo('chat'); setCrumb('<span>问 AI</span>'); setTopActions(''); Z.ChatPage.mount(view, docs); return; }
@@ -607,6 +608,174 @@
     setCrumb('<span>复习</span>');
     setTopActions('');
     Z.Review.mount(view, docs);
+  }
+
+  /* ================= 功能地图 ================= */
+  const MAP_TILES = [
+    { k: 'import', zone: '导入', icon: 'upload', name: '多格式导入', go: '#/home', goLabel: '去导入资料', tags: ['PDF/图片/Word', '本机解析'],
+      desc: 'PDF、图片、Word、PPT、Markdown、TXT 拖进来就能用，解析全部在本机完成，不上传。' },
+    { k: 'ocr', zone: '导入', icon: 'image', name: 'OCR 纠错', go: '#/home', goLabel: '试试图片导入', tags: ['灰度增强', '典籍纠错'],
+      desc: '扫描件先放大、灰度、拉对比度再识别；孟武伯、子曰这类典籍错字会自动纠正，仍可手动改。' },
+    { k: 'wanted', zone: '导入', icon: 'target', name: '按需提取', go: '#/home', goLabel: '描述提取需求', tags: ['只要题目', '只要公式'],
+      desc: '先告诉它要提取什么，清洗规则就按你的意图筛选，去掉页码、页眉与广告。' },
+    { k: 'read', zone: '理解', icon: 'book', name: '结构化阅读', go: '#/home', goLabel: '打开文库', tags: ['分块排版', '续读'],
+      desc: '长文自动分块排版，字号行距自适应；离开后回来还能从上次位置继续读。' },
+
+    { k: 'mind', zone: '理解', icon: 'mindmap', name: '思维导图', go: '#/home', goLabel: '生成导图', tags: ['知识树', '回看原文'],
+      desc: '一键把资料拆成知识树，点节点弹出原文，总览节点聚合全文要点。' },
+    { k: 'bi', zone: '理解', icon: 'translate', name: '双语 · 文言', go: '#/home', goLabel: '看双语对照', tags: ['自动识别', '文言转白话'],
+      desc: '自动判断语言，英文走双语对照；文言文用专用提示词转白话，不会误翻成英文。' },
+    { k: 'word', zone: '理解', icon: 'volume', name: '点词朗读', go: '#/home', goLabel: '点词试试', tags: ['音标释义', '整段朗读'],
+      desc: '选词即查音标、释义与例句，也能整段朗读，适合跟读与听写。' },
+    { k: 'mark', zone: '理解', icon: 'highlighter', name: '手绘批注', go: '#/home', goLabel: '开始批注', tags: ['高亮', '手写笔迹'],
+      desc: '高亮、笔记、手写笔迹都叠在原文上，标注随资料一起保存与导出。' },
+
+    { k: 'card', zone: '记忆', icon: 'cards', name: '间隔复习', go: '#/review', goLabel: '进入复习', tags: ['到期提醒', '掌握度'],
+      desc: '从高亮与知识点生成记忆卡片，按到期时间排复习，今天只看该复习的那几张。' },
+    { k: 'lab', zone: '记忆', icon: 'lab', name: '知识工坊', go: '#/lab', goLabel: '打开知识工坊', tags: ['68 条知识点', '自测'],
+      desc: '内置知识点含本质、公式、易错与变式，配自测题，可反复练到会。' },
+    { k: 'stat', zone: '记忆', icon: 'target', name: '学习统计', go: '#/home', goLabel: '看学习统计', tags: ['热力图', '连续天数'],
+      desc: '番茄时长、在线时长、30 天热力图与连续复习天数，掌握度一眼看清。' },
+
+    { k: 'ai', zone: '智能', icon: 'sparkle', name: 'AI 诊断', go: '#/chat', goLabel: '问 AI', tags: ['知识点层', '真题层'],
+      desc: '卡壳时按“知识点层 / 真题层”给出诊断，也能带着当前资料自由提问。' }
+  ];
+
+  function renderMap(view) {
+    setCrumb('<span>功能地图</span>');
+    setTopActions('');
+    const ZONES = ['导入', '理解', '记忆', '智能'];
+    view.innerHTML = `<div class="map-page">
+      <div class="map-head">
+        <span class="eyebrow">FEATURE MAP · 功能地图</span>
+        <h1>把资料变成记得住的知识，<em>一共分几步</em>？</h1>
+        <p>点击任意功能块看它解决什么问题；拖动地图可以旋转，双击复位。</p>
+      </div>
+      <div class="map-layout">
+        <div class="map-stage" id="map-stage">
+          <div class="map-board" id="map-board">
+            <div class="map-floor"></div>
+            ${MAP_TILES.map((t, i) => `<button class="map-tile" data-k="${t.k}" data-zone="${t.zone}" style="--i:${i}" aria-label="${t.name}">
+              <span class="mt-lift"><span class="mt-flip">
+                <span class="mt-face f"><span class="mt-ico">${Z.icon(t.icon)}</span><b>${t.name}</b><em>${t.zone}</em></span>
+                <span class="mt-face b"><b>${t.name}</b><span>见右侧 →</span></span>
+              </span></span>
+            </button>`).join('')}
+          </div>
+          <div class="map-fx" id="map-fx"></div>
+          <div class="map-tools">
+            <button class="ghost-icon tiny" data-map-rot="-18" title="左转">${Z.icon('undo')}</button>
+            <button class="ghost-icon tiny" data-map-rot="18" title="右转">${Z.icon('refresh')}</button>
+            <button class="ghost-icon tiny" data-map-reset title="复位">${Z.icon('target')}</button>
+          </div>
+          <div class="map-legend">${ZONES.map((z) => `<button data-zone-filter="${z}">${z}</button>`).join('')}</div>
+          <div class="map-hint">拖动旋转 · 双击复位</div>
+        </div>
+        <aside class="map-panel" id="map-panel"></aside>
+      </div>
+    </div>`;
+
+    const stage = Z.$('#map-stage', view);
+    const board = Z.$('#map-board', view);
+    const fx = Z.$('#map-fx', view);
+    const panel = Z.$('#map-panel', view);
+    const tiles = Z.$$('.map-tile', view);
+    const HOME_ROT = -34;
+    let rot = Number(Z.store.get('map.rot', HOME_ROT)) || HOME_ROT;
+    let drag = null;
+    let moved = 0;
+
+    const apply = () => board.style.setProperty('--rot', rot + 'deg');
+    apply();
+
+    const paint = (t) => {
+      panel.classList.remove('in');
+      panel.innerHTML = `<span class="mp-zone" data-zone="${t.zone}">${t.zone}</span>
+        <h3>${t.name}</h3>
+        <p>${t.desc}</p>
+        <div class="mp-tags">${t.tags.map((x) => `<span>${x}</span>`).join('')}</div>
+        <a class="btn primary small" href="${t.go}">${t.goLabel}</a>
+        <div class="mp-foot">${Z.icon('info')} 继续点其他方块可以对比</div>`;
+      requestAnimationFrame(() => panel.classList.add('in'));
+    };
+
+    const burst = (x, y) => {
+      for (let i = 0; i < 16; i++) {
+        const s = document.createElement('i');
+        const a = (Math.PI * 2 * i) / 16 + Math.random() * 0.45;
+        const d = 46 + Math.random() * 92;
+        s.style.setProperty('--dx', Math.cos(a) * d + 'px');
+        s.style.setProperty('--dy', Math.sin(a) * d + 'px');
+        s.style.left = x + 'px';
+        s.style.top = y + 'px';
+        s.style.animationDelay = Math.random() * 80 + 'ms';
+        fx.appendChild(s);
+        setTimeout(() => s.remove(), 1100);
+      }
+    };
+
+    const select = (tile, ev) => {
+      const t = MAP_TILES.find((x) => x.k === tile.dataset.k);
+      tiles.forEach((x) => x.classList.toggle('on', x === tile));
+      paint(t);
+      if (ev) {
+        const r = stage.getBoundingClientRect();
+        burst(ev.clientX - r.left, ev.clientY - r.top);
+      }
+    };
+
+    const setRot = (v) => {
+      rot = Z.clamp(v, -78, 78);
+      board.style.transition = '';
+      apply();
+      Z.store.set('map.rot', rot);
+    };
+
+    tiles.forEach((tile) => tile.addEventListener('click', (e) => {
+      if (moved > 8) { moved = 0; return; }
+      select(tile, e);
+    }));
+
+    stage.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('button, a')) return;
+      drag = e.clientX;
+      moved = 0;
+      board.style.transition = 'none';
+      stage.classList.add('grabbing');
+      try { stage.setPointerCapture(e.pointerId); } catch (err) {}
+    });
+    stage.addEventListener('pointermove', (e) => {
+      if (drag === null) return;
+      const dx = e.clientX - drag;
+      drag = e.clientX;
+      moved += Math.abs(dx);
+      rot = Z.clamp(rot + dx * 0.32, -78, 78);
+      apply();
+    });
+    const endDrag = () => {
+      if (drag === null) return;
+      drag = null;
+      stage.classList.remove('grabbing');
+      board.style.transition = '';
+      Z.store.set('map.rot', rot);
+    };
+    stage.addEventListener('pointerup', endDrag);
+    stage.addEventListener('pointercancel', endDrag);
+    stage.addEventListener('dblclick', (e) => {
+      if (e.target.closest('button')) return;
+      setRot(HOME_ROT);
+    });
+
+    Z.$$('[data-map-rot]', view).forEach((b) => b.addEventListener('click', () => setRot(rot + Number(b.dataset.mapRot))));
+    Z.$('[data-map-reset]', view).addEventListener('click', () => setRot(HOME_ROT));
+    Z.$$('[data-zone-filter]', view).forEach((b) => b.addEventListener('click', () => {
+      const z = b.dataset.zoneFilter;
+      const off = board.dataset.focus === z;
+      board.dataset.focus = off ? '' : z;
+      Z.$$('[data-zone-filter]', view).forEach((x) => x.classList.toggle('on', !off && x === b));
+    }));
+
+    paint(MAP_TILES[0]);
   }
 
   /* ================= 导入 ================= */
